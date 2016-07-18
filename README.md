@@ -48,11 +48,12 @@ Your configuration file will need to define the following pin manipulation funct
 
 Note that all pin manipulation functions are required even if one of the interfaces (JTAG or SWD) is not enabled.
 
-Additionally configuration file must contain basic initialization functions:
+Additionally configuration file must provide basic initialization and control functions:
 
  * DAP_CONFIG_SETUP()
  * DAP_CONFIG_DISCONNECT()
  * DAP_CONFIG_CONNECT_SWD()
  * DAP_CONFIG_CONNECT_JTAG()
+ * DAP_CONFIG_LED()
 
 

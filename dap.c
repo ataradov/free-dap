@@ -652,9 +652,7 @@ static void dap_led(uint8_t *req, uint8_t *resp)
   int index = req[0];
   int state = req[1];
 
-  // TODO: Actually set LED state
-  (void)index;
-  (void)state;
+  DAP_CONFIG_LED(index, state);
 
   resp[0] = DAP_OK;
 }

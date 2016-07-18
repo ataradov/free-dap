@@ -41,6 +41,8 @@ HAL_GPIO_PIN(TDO,          A, 9)
 HAL_GPIO_PIN(nTRST,        B, 23)
 HAL_GPIO_PIN(nRESET,       A, 2)
 
+HAL_GPIO_PIN(LED,          B, 30)
+
 #define DAP_CONFIG_ENABLE_SWD
 //#define DAP_CONFIG_ENABLE_JTAG
 
@@ -171,6 +173,9 @@ static inline void DAP_CONFIG_SETUP(void)
   HAL_GPIO_nRESET_in();
 
   HAL_GPIO_SWDIO_TMS_pullup();
+
+  HAL_GPIO_LED_out();
+  HAL_GPIO_LED_set();
 }
 
 //-----------------------------------------------------------------------------
@@ -220,6 +225,13 @@ static inline void DAP_CONFIG_CONNECT_JTAG(void)
 
   HAL_GPIO_nTRST_out();
   HAL_GPIO_nTRST_set();
+}
+
+//-----------------------------------------------------------------------------
+static inline void DAP_CONFIG_LED(int index, int state)
+{
+  if (0 == index)
+    HAL_GPIO_LED_write(!state);
 }
 
 #endif // _DAP_CONFIG_H_
