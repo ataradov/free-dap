@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, Alex Taradov <alex@taradov.com>
+ * Copyright (c) 2017, Alex Taradov <alex@taradov.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include "samd21.h"
+#include "samd11.h"
 #include "hal_gpio.h"
 #include "nvm_data.h"
 #include "usb.h"
@@ -39,8 +39,14 @@
 #include "dap_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
+HAL_GPIO_PIN(LED,      A, 14)
+
 #define APP_EP_SEND    1
 #define APP_EP_RECV    2
+
+#define APP_PWM_PER    0xffff
+#define APP_PWM_DIM    0xf000
+#define APP_PWM_BRIGHT 0
 
 /*- Variables ---------------------------------------------------------------*/
 ALIGNED(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
@@ -81,6 +87,36 @@ static void sys_init(void)
 }
 
 //-----------------------------------------------------------------------------
+static void led_init(void)
+{
+  HAL_GPIO_LED_out();
+  HAL_GPIO_LED_pmuxen(HAL_GPIO_PMUX_F);
+
+  PM->APBCMASK.reg |= PM_APBCMASK_TCC0;
+
+  GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID(TCC0_GCLK_ID) |
+      GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN(0);
+
+  TCC0->CTRLA.reg =
+      TCC_CTRLA_PRESCALER(TCC_CTRLA_PRESCALER_DIV1_Val) |
+      TCC_CTRLA_PRESCSYNC(TCC_CTRLA_PRESCSYNC_PRESC_Val);
+
+  TCC0->WAVE.reg = TCC_WAVE_WAVEGEN_NPWM;
+  TCC0->PER.reg = APP_PWM_PER;
+  TCC0->CC[0].reg = APP_PWM_DIM;
+  TCC0->CTRLA.bit.ENABLE = 1;
+}
+
+//-----------------------------------------------------------------------------
+void app_led_set_state(int state)
+{
+  TCC0->CTRLA.bit.ENABLE = 0;
+  TCC0->COUNT.reg = 0;
+  TCC0->CC[0].reg = state ? APP_PWM_BRIGHT : APP_PWM_DIM;
+  TCC0->CTRLA.bit.ENABLE = 1;
+}
+
+//-----------------------------------------------------------------------------
 void usb_send_callback(void)
 {
 }
@@ -107,6 +143,7 @@ void usb_configuration_callback(int config)
 int main(void)
 {
   sys_init();
+  led_init();
   dap_init();
   usb_init();
 
