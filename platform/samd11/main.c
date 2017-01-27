@@ -28,9 +28,10 @@
 
 /*- Includes ----------------------------------------------------------------*/
 #include <stdlib.h>
+#include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <string.h>
+#include <stdalign.h>
 #include "samd11.h"
 #include "hal_gpio.h"
 #include "nvm_data.h"
@@ -49,8 +50,8 @@ HAL_GPIO_PIN(LED,      A, 14)
 #define APP_PWM_BRIGHT 0
 
 /*- Variables ---------------------------------------------------------------*/
-ALIGNED(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
-ALIGNED(4) uint8_t app_response_buffer[DAP_CONFIG_PACKET_SIZE];
+alignas(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
+alignas(4) uint8_t app_response_buffer[DAP_CONFIG_PACKET_SIZE];
 
 /*- Implementations ---------------------------------------------------------*/
 

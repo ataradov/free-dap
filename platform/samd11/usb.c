@@ -256,7 +256,7 @@ void usb_handle_standard_request(usb_request_t *request)
 
       length = LIMIT(length, sizeof(usb_hid_report_descriptor));
 
-      udc_control_send(usb_hid_report_descriptor, length);
+      udc_control_send((uint8_t *)usb_hid_report_descriptor, length);
     } break;
 
     default:

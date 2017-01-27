@@ -30,8 +30,6 @@
 #define _UTILS_H_
 
 /*- Definitions -------------------------------------------------------------*/
-#define ALIGNED(a)      __attribute__((__aligned__(a)))
-
 #define PACK            __attribute__((packed))
 
 #define INLINE          static inline __attribute__((always_inline))

@@ -28,11 +28,12 @@
 
 
 /*- Includes ----------------------------------------------------------------*/
+#include <stdalign.h>
 #include "usb.h"
 #include "usb_descriptors.h"
 
 /*- Variables ---------------------------------------------------------------*/
-ALIGNED(4) usb_device_descriptor_t usb_device_descriptor =
+const alignas(4) usb_device_descriptor_t usb_device_descriptor =
 {
   .bLength            = sizeof(usb_device_descriptor_t),
   .bDescriptorType    = USB_DEVICE_DESCRIPTOR,
@@ -50,7 +51,7 @@ ALIGNED(4) usb_device_descriptor_t usb_device_descriptor =
   .bNumConfigurations = 1,
 };
 
-ALIGNED(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
+const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
 {
   .configuration =
   {
@@ -109,7 +110,7 @@ ALIGNED(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
   },
 };
 
-ALIGNED(4) uint8_t usb_hid_report_descriptor[33] =
+const alignas(4) uint8_t usb_hid_report_descriptor[33] =
 {
   0x06, 0x00, 0xff,  // Usage Page (Vendor Defined 0xFF00)
   0x09, 0x01,        // Usage (0x01)
@@ -129,7 +130,7 @@ ALIGNED(4) uint8_t usb_hid_report_descriptor[33] =
   0xc0,              // End Collection
 };
 
-ALIGNED(4) usb_string_descriptor_zero_t usb_string_descriptor_zero =
+const alignas(4) usb_string_descriptor_zero_t usb_string_descriptor_zero =
 {
   .bLength               = sizeof(usb_string_descriptor_zero_t),
   .bDescriptorType       = USB_STRING_DESCRIPTOR,
@@ -145,5 +146,5 @@ char *usb_strings[] =
   [USB_STR_INTERFACE]     = "Main Interface",
 };
 
-ALIGNED(4) uint8_t usb_string_descriptor_buffer[64];
+alignas(4) uint8_t usb_string_descriptor_buffer[64];
 
