@@ -1033,6 +1033,9 @@ Source: www.cypressindustries.com</description>
 <frame x1="0" y1="0" x2="152.4" y2="119.38" columns="8" rows="5" layer="97"/>
 <text x="35.56" y="106.68" size="1.778" layer="97" align="bottom-center">Program</text>
 <text x="78.74" y="106.68" size="1.778" layer="97" align="bottom-center">Target</text>
+<text x="60.96" y="15.24" size="1.778" layer="97">Copyright (c) 2016-2017, Alex Taradov &lt;alex@taradov.com&gt;
+
+MCU firmware source code is available at https://github.com/ataradov/free-dap</text>
 </plain>
 <instances>
 <instance part="IC2" gate="G$1" x="40.64" y="53.34"/>
@@ -1329,4 +1332,10 @@ Source: www.cypressindustries.com</description>
 </sheets>
 </schematic>
 </drawing>
+<compatibility>
+<note version="6.3" minversion="6.2.2" severity="warning">
+Since Version 6.2.2 text objects can contain more than one line,
+which will not be processed correctly with this version.
+</note>
+</compatibility>
 </eagle>
