@@ -40,14 +40,26 @@
 #include "dap_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
-HAL_GPIO_PIN(LED,      A, 14)
+#if defined(BOARD_SWD_USB_MINI)
+  HAL_GPIO_PIN(LED, A, 14);
+#elif defined(BOARD_SWD_USB_STD)
+  HAL_GPIO_PIN(LED, A, 4);
+#else
+  #error Undefined board
+#endif
 
 #define APP_EP_SEND    1
 #define APP_EP_RECV    2
 
-#define APP_PWM_PER    0xffff
-#define APP_PWM_DIM    0xf000
-#define APP_PWM_BRIGHT 0
+#if defined(BOARD_SWD_USB_MINI)
+  #define APP_PWM_PER    0xffff
+  #define APP_PWM_DIM    0xf000
+  #define APP_PWM_BRIGHT 0
+#elif defined(BOARD_SWD_USB_STD)
+  #define APP_PWM_PER    0xffff
+  #define APP_PWM_DIM    0x1000
+  #define APP_PWM_BRIGHT 0xf000
+#endif
 
 /*- Variables ---------------------------------------------------------------*/
 alignas(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];

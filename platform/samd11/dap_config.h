@@ -34,9 +34,20 @@
 #include "hal_gpio.h"
 
 /*- Definitions -------------------------------------------------------------*/
-HAL_GPIO_PIN(SWCLK_TCK,    A, 8)
-HAL_GPIO_PIN(SWDIO_TMS,    A, 5)
-HAL_GPIO_PIN(nRESET,       A, 9)
+//#define BOARD_SWD_USB_MINI
+#define BOARD_SWD_USB_STD
+
+#if defined(BOARD_SWD_USB_MINI)
+  HAL_GPIO_PIN(SWCLK_TCK,    A, 8)
+  HAL_GPIO_PIN(SWDIO_TMS,    A, 5)
+  HAL_GPIO_PIN(nRESET,       A, 9)
+#elif defined(BOARD_SWD_USB_STD)
+  HAL_GPIO_PIN(SWCLK_TCK,    A, 14)
+  HAL_GPIO_PIN(SWDIO_TMS,    A, 15)
+  HAL_GPIO_PIN(SWO_DTO,      A, 9)
+  HAL_GPIO_PIN(TDI,          A, 8)
+  HAL_GPIO_PIN(nRESET,       A, 5)
+#endif
 
 #define DAP_CONFIG_ENABLE_SWD
 //#define DAP_CONFIG_ENABLE_JTAG
