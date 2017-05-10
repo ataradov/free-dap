@@ -64,7 +64,6 @@
 /*- Variables ---------------------------------------------------------------*/
 static alignas(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
 static alignas(4) uint8_t app_response_buffer[DAP_CONFIG_PACKET_SIZE];
-extern char usb_serial_number[16];
 
 /*- Implementations ---------------------------------------------------------*/
 
