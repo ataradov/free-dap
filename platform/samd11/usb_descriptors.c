@@ -137,11 +137,13 @@ const alignas(4) usb_string_descriptor_zero_t usb_string_descriptor_zero =
   .wLANGID               = 0x0409, // English (United States)
 };
 
+char usb_serial_number[16];
+
 char *usb_strings[] =
 {
   [USB_STR_MANUFACTURER]  = "Alex Taradov",
   [USB_STR_PRODUCT]       = "Generic CMSIS-DAP Adapter",
-  [USB_STR_SERIAL_NUMBER] = "123456",
+  [USB_STR_SERIAL_NUMBER] = usb_serial_number,
   [USB_STR_CONFIGURATION] = "Main Configuration",
   [USB_STR_INTERFACE]     = "Main Interface",
 };
