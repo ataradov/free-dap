@@ -32,7 +32,7 @@
 #include "usb_descriptors.h"
 
 /*- Variables ---------------------------------------------------------------*/
-ALIGNED(4) usb_device_descriptor_t usb_device_descriptor =
+ALIGNED(4) const usb_device_descriptor_t usb_device_descriptor =
 {
   .bLength            = sizeof(usb_device_descriptor_t),
   .bDescriptorType    = USB_DEVICE_DESCRIPTOR,
@@ -50,7 +50,7 @@ ALIGNED(4) usb_device_descriptor_t usb_device_descriptor =
   .bNumConfigurations = 1,
 };
 
-ALIGNED(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
+ALIGNED(4) const usb_configuration_hierarchy_t usb_configuration_hierarchy =
 {
   .configuration =
   {
@@ -109,7 +109,7 @@ ALIGNED(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
   },
 };
 
-ALIGNED(4) uint8_t usb_hid_report_descriptor[33] =
+ALIGNED(4) const uint8_t usb_hid_report_descriptor[33] =
 {
   0x06, 0x00, 0xff,  // Usage Page (Vendor Defined 0xFF00)
   0x09, 0x01,        // Usage (0x01)
@@ -129,14 +129,14 @@ ALIGNED(4) uint8_t usb_hid_report_descriptor[33] =
   0xc0,              // End Collection
 };
 
-ALIGNED(4) usb_string_descriptor_zero_t usb_string_descriptor_zero =
+ALIGNED(4) const usb_string_descriptor_zero_t usb_string_descriptor_zero =
 {
   .bLength               = sizeof(usb_string_descriptor_zero_t),
   .bDescriptorType       = USB_STRING_DESCRIPTOR,
   .wLANGID               = 0x0409, // English (United States)
 };
 
-char *usb_strings[] =
+const char *const usb_strings[] =
 {
   [USB_STR_MANUFACTURER]  = "Alex Taradov",
   [USB_STR_PRODUCT]       = "Generic CMSIS-DAP Adapter",

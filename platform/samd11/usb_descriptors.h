@@ -78,7 +78,7 @@ extern const usb_device_descriptor_t usb_device_descriptor;
 extern const usb_configuration_hierarchy_t usb_configuration_hierarchy;
 extern const uint8_t usb_hid_report_descriptor[33];
 extern const usb_string_descriptor_zero_t usb_string_descriptor_zero;
-extern char *usb_strings[];
+extern const char *const usb_strings[];
 extern uint8_t usb_string_descriptor_buffer[64];
 
 #endif // _USB_DESCRIPTORS_H_
