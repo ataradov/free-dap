@@ -139,7 +139,7 @@ const alignas(4) usb_string_descriptor_zero_t usb_string_descriptor_zero =
 
 char usb_serial_number[16];
 
-char *usb_strings[] =
+const char *const usb_strings[] =
 {
   [USB_STR_MANUFACTURER]  = "Alex Taradov",
   [USB_STR_PRODUCT]       = "Generic CMSIS-DAP Adapter",

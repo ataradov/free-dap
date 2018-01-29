@@ -113,7 +113,7 @@ void usb_handle_standard_request(usb_request_t *request)
         }
         else if (index < USB_STR_COUNT)
         {
-          char *str = usb_strings[index];
+          const char *str = usb_strings[index];
           int len = strlen(str);
 
           memset(usb_string_descriptor_buffer, 0, sizeof(usb_string_descriptor_buffer));
