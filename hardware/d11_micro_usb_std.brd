@@ -428,21 +428,21 @@ Please make sure your boards conform to these design rules.</description>
 <element name="C2" library="ataradov_rlc" package="SMD0603" value="1uF" x="9.398" y="9.144" smashed="yes" rot="R180">
 <attribute name="NAME" x="9.398" y="8.128" size="1.27" layer="25" font="vector" rot="R180" align="bottom-center"/>
 </element>
-<element name="R2" library="ataradov_rlc" package="SMD0603" value="330" x="16.256" y="3.81" rot="MR0"/>
-<element name="R3" library="ataradov_rlc" package="SMD0603" value="330" x="16.256" y="5.334" rot="MR0"/>
-<element name="R4" library="ataradov_rlc" package="SMD0603" value="330" x="16.256" y="6.858" rot="MR0"/>
+<element name="R2" library="ataradov_rlc" package="SMD0603" value="100" x="16.256" y="3.81" rot="MR0"/>
+<element name="R3" library="ataradov_rlc" package="SMD0603" value="100" x="16.256" y="5.334" rot="MR0"/>
+<element name="R4" library="ataradov_rlc" package="SMD0603" value="100" x="16.256" y="6.858" rot="MR0"/>
 <element name="IC1" library="ataradov_vreg" package="SOT23-5" value="MIC5504-3.3" x="9.398" y="5.588" smashed="yes">
 <attribute name="NAME" x="9.398" y="7.874" size="1.27" layer="25" font="vector" align="bottom-center"/>
 </element>
-<element name="R7" library="ataradov_rlc" package="SMD0603" value="330" x="12.7" y="9.144" rot="R270"/>
+<element name="R7" library="ataradov_rlc" package="SMD0603" value="470" x="12.7" y="9.144" rot="R270"/>
 <element name="TP1" library="ataradov_misc" package="TP-1.27MM" value="SIO" x="7.874" y="1.524" rot="MR0"/>
 <element name="TP2" library="ataradov_misc" package="TP-1.27MM" value="" x="12.954" y="1.524" rot="MR0"/>
 <element name="TP3" library="ataradov_misc" package="TP-1.27MM" value="" x="10.414" y="1.524" rot="MR0"/>
 <element name="TP4" library="ataradov_misc" package="TP-1.27MM" value="" x="5.334" y="1.524" rot="MR0"/>
 <element name="LED1" library="ataradov_led" package="SMD0603" value="" x="12.7" y="5.588" rot="R270"/>
 <element name="J1" library="ataradov_conn" package="HEADER-5X2-1.27MM" value="HEADER-5X2-TH-1.27" x="19.812" y="5.588" rot="R90"/>
-<element name="R1" library="ataradov_rlc" package="SMD0603" value="330" x="16.256" y="8.382" rot="MR0"/>
-<element name="R8" library="ataradov_rlc" package="SMD0603" value="330" x="16.256" y="9.906" rot="MR0"/>
+<element name="R1" library="ataradov_rlc" package="SMD0603" value="100" x="16.256" y="8.382" rot="MR0"/>
+<element name="R8" library="ataradov_rlc" package="SMD0603" value="100" x="16.256" y="9.906" rot="MR0"/>
 <element name="J2" library="ataradov_conn" package="USB-B-MICRO-SMT-SHELL-TH" value="" x="0" y="5.588"/>
 </elements>
 <signals>

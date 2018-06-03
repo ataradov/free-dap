@@ -828,15 +828,15 @@
 <part name="P_3" library="ataradov_pwr" deviceset="V_USB" device=""/>
 <part name="C1" library="ataradov_rlc" deviceset="C" device="-0603" value="1uF"/>
 <part name="C2" library="ataradov_rlc" deviceset="C" device="-0603" value="1uF"/>
-<part name="R2" library="ataradov_rlc" deviceset="R" device="-0603" value="330"/>
-<part name="R3" library="ataradov_rlc" deviceset="R" device="-0603" value="330"/>
-<part name="R4" library="ataradov_rlc" deviceset="R" device="-0603" value="330"/>
+<part name="R2" library="ataradov_rlc" deviceset="R" device="-0603" value="100"/>
+<part name="R3" library="ataradov_rlc" deviceset="R" device="-0603" value="100"/>
+<part name="R4" library="ataradov_rlc" deviceset="R" device="-0603" value="100"/>
 <part name="IC1" library="ataradov_vreg" deviceset="MIC5504" device="-SOT23-5" value="MIC5504-3.3"/>
 <part name="P_4" library="ataradov_pwr" deviceset="GND" device=""/>
 <part name="P_6" library="ataradov_pwr" deviceset="GND" device=""/>
 <part name="P_1" library="ataradov_pwr" deviceset="GND" device=""/>
 <part name="P_2" library="ataradov_pwr" deviceset="GND" device=""/>
-<part name="R7" library="ataradov_rlc" deviceset="R" device="-0603" value="330"/>
+<part name="R7" library="ataradov_rlc" deviceset="R" device="-0603" value="470"/>
 <part name="TP1" library="ataradov_misc" deviceset="TEST-POINT" device="-1.27MM" value="SIO"/>
 <part name="TP2" library="ataradov_misc" deviceset="TEST-POINT" device="-1.27MM"/>
 <part name="TP3" library="ataradov_misc" deviceset="TEST-POINT" device="-1.27MM"/>
@@ -844,8 +844,8 @@
 <part name="LED1" library="ataradov_led" deviceset="LED_SMD" device="LED_0603"/>
 <part name="J1" library="ataradov_conn" deviceset="HEADER-5X2" device="-TH-1.27"/>
 <part name="P_11" library="ataradov_pwr" deviceset="GND" device=""/>
-<part name="R1" library="ataradov_rlc" deviceset="R" device="-0603" value="330"/>
-<part name="R8" library="ataradov_rlc" deviceset="R" device="-0603" value="330"/>
+<part name="R1" library="ataradov_rlc" deviceset="R" device="-0603" value="100"/>
+<part name="R8" library="ataradov_rlc" deviceset="R" device="-0603" value="100"/>
 <part name="P_5" library="ataradov_pwr" deviceset="GND" device=""/>
 <part name="J2" library="ataradov_conn" deviceset="USB-B-MICRO" device="-SMT"/>
 </parts>
