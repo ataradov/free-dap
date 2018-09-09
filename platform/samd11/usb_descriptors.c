@@ -148,5 +148,5 @@ const char *const usb_strings[] =
   [USB_STR_INTERFACE]     = "Main Interface",
 };
 
-alignas(4) uint8_t usb_string_descriptor_buffer[64];
+alignas(4) uint8_t usb_string_descriptor_buffer[128];
 
