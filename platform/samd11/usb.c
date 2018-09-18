@@ -28,6 +28,7 @@
 
 /*- Includes ----------------------------------------------------------------*/
 #include <stdbool.h>
+#include <stdalign.h>
 #include <string.h>
 #include "udc.h"
 #include "usb.h"
@@ -115,18 +116,21 @@ void usb_handle_standard_request(usb_request_t *request)
         {
           const char *str = usb_strings[index];
           int len = strlen(str);
+          int size = len*2 + 2;
+          alignas(4) uint8_t buf[size];
 
-          memset(usb_string_descriptor_buffer, 0, sizeof(usb_string_descriptor_buffer));
-
-          usb_string_descriptor_buffer[0] = len*2 + 2;
-          usb_string_descriptor_buffer[1] = USB_STRING_DESCRIPTOR;
+          buf[0] = size;
+          buf[1] = USB_STRING_DESCRIPTOR;
 
           for (int i = 0; i < len; i++)
-            usb_string_descriptor_buffer[2 + i*2] = str[i];
+          {
+            buf[2 + i*2] = str[i];
+            buf[3 + i*2] = 0;
+          }
 
-          length = LIMIT(length, usb_string_descriptor_buffer[0]);
+          length = LIMIT(length, size);
 
-          udc_control_send(usb_string_descriptor_buffer, length);
+          udc_control_send(buf, length);
         }
         else
         {
@@ -134,8 +138,10 @@ void usb_handle_standard_request(usb_request_t *request)
         }
       }
       else
+      {
         udc_control_stall();
-    }  break;
+      }
+    } break;
 
     case USB_CMD(OUT, DEVICE, STANDARD, SET_ADDRESS):
     {

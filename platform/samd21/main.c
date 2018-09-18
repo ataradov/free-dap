@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdalign.h>
 #include <string.h>
 #include "samd21.h"
 #include "hal_gpio.h"
@@ -43,8 +44,8 @@
 #define APP_EP_RECV    2
 
 /*- Variables ---------------------------------------------------------------*/
-ALIGNED(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
-ALIGNED(4) uint8_t app_response_buffer[DAP_CONFIG_PACKET_SIZE];
+alignas(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
+alignas(4) uint8_t app_response_buffer[DAP_CONFIG_PACKET_SIZE];
 
 /*- Implementations ---------------------------------------------------------*/
 
