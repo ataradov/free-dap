@@ -69,10 +69,10 @@ ServiceBinary=%12%\usbser.sys
 [SourceDisksFiles]
 [SourceDisksNames]
 [DeviceList]
-%DESCRIPTION%=DriverInstall, USB\VID_6666&PID_8888
+%DESCRIPTION%=DriverInstall, USB\VID_6666&PID_6600
 
 [DeviceList.NTamd64]
-%DESCRIPTION%=DriverInstall, USB\VID_6666&PID_8888
+%DESCRIPTION%=DriverInstall, USB\VID_6666&PID_6600
 
 [Strings]
 MANUFACTURER="Alex Taradov"

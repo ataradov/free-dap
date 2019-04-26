@@ -52,7 +52,7 @@ HAL_GPIO_PIN(nRESET,       A, 9)
 #define DAP_CONFIG_VENDOR_STR          "Alex Taradov"
 #define DAP_CONFIG_PRODUCT_STR         "Generic CMSIS-DAP Adapter"
 #define DAP_CONFIG_SER_NUM_STR         usb_serial_number
-#define DAP_CONFIG_FW_VER_STR          "v0.5"
+#define DAP_CONFIG_FW_VER_STR          "v1.0"
 #define DAP_CONFIG_DEVICE_VENDOR_STR   NULL
 #define DAP_CONFIG_DEVICE_NAME_STR     NULL
 
@@ -66,7 +66,6 @@ HAL_GPIO_PIN(nRESET,       A, 9)
 #define DAP_CONFIG_FAST_CLOCK          2200000 // Hz
 
 /*- Prototypes --------------------------------------------------------------*/
-extern void app_led_set_state(int state);
 extern char usb_serial_number[16];
 
 /*- Implementations ---------------------------------------------------------*/
@@ -208,8 +207,8 @@ static inline void DAP_CONFIG_CONNECT_JTAG(void)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_LED(int index, int state)
 {
-  if (0 == index)
-    app_led_set_state(state);
+  (void)index;
+  (void)state;
 }
 
 #endif // _DAP_CONFIG_H_

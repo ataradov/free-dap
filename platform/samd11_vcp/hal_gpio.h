@@ -77,6 +77,7 @@
     PORT_IOBUS->Group[HAL_GPIO_PORT##port].DIRCLR.reg = (1 << pin);		\
     PORT_IOBUS->Group[HAL_GPIO_PORT##port].PINCFG[pin].reg |= PORT_PINCFG_INEN;	\
     PORT_IOBUS->Group[HAL_GPIO_PORT##port].PINCFG[pin].reg &= ~PORT_PINCFG_PULLEN;\
+    PORT_IOBUS->Group[HAL_GPIO_PORT##port].CTRL.reg |= (1 << pin);		\
     (void)HAL_GPIO_##name##_in;							\
   }										\
 										\
