@@ -5,6 +5,11 @@ BIN = free_dap
 ##############################################################################
 .PHONY: all directory clean size
 
+ifdef OS
+  MKDIR = gmkdir
+else
+  MKDIR = mkdir
+endif
 CC = arm-none-eabi-gcc
 OBJCOPY = arm-none-eabi-objcopy
 SIZE = arm-none-eabi-size
@@ -61,7 +66,7 @@ $(BUILD)/$(BIN).bin: $(BUILD)/$(BIN).elf
 	@$(CC) $(CFLAGS) $(filter %/$(subst .o,.c,$(notdir $@)), $(SRCS)) -c -o $@
 
 directory:
-	@gmkdir -p $(BUILD)
+	@$(MKDIR) -p $(BUILD)
 
 size: $(BUILD)/$(BIN).elf
 	@echo size:
