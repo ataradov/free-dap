@@ -9,6 +9,12 @@ CC = arm-none-eabi-gcc
 OBJCOPY = arm-none-eabi-objcopy
 SIZE = arm-none-eabi-size
 
+ifeq ($(OS), Windows_NT)
+  MKDIR = gmkdir
+else
+  MKDIR = mkdir
+endif
+
 CFLAGS += -W -Wall -Wextra --std=gnu99 -O2
 CFLAGS += -fno-diagnostics-show-caret
 CFLAGS += -fdata-sections -ffunction-sections
@@ -61,7 +67,7 @@ $(BUILD)/$(BIN).bin: $(BUILD)/$(BIN).elf
 	@$(CC) $(CFLAGS) $(filter %/$(subst .o,.c,$(notdir $@)), $(SRCS)) -c -o $@
 
 directory:
-	@gmkdir -p $(BUILD)
+	@$(MKDIR) -p $(BUILD)
 
 size: $(BUILD)/$(BIN).elf
 	@echo size:
