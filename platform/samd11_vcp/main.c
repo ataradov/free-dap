@@ -159,6 +159,8 @@ void usb_configuration_callback(int config)
   usb_cdc_recv(app_recv_buffer, sizeof(app_recv_buffer));
   usb_hid_recv(app_request_buffer, sizeof(app_request_buffer));
 
+  app_send_buffer_free = true;
+
   (void)config;
 }
 
