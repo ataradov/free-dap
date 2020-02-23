@@ -37,10 +37,6 @@
 #error JTAG is not supported. If you have a real need for it, please contact me.
 #endif
 
-#if DAP_CONFIG_PACKET_COUNT != 1
-#error DAP_CONFIG_PACKET_COUNT must be 1 for now.
-#endif
-
 /*- Definitions -------------------------------------------------------------*/
 enum
 {
@@ -641,8 +637,8 @@ static void dap_info(uint8_t *req, uint8_t *resp)
   else if (DAP_INFO_PACKET_SIZE == index)
   {
     resp[0] = 2;
-    resp[1] = DAP_CONFIG_PACKET_SIZE;
-    resp[2] = DAP_CONFIG_PACKET_SIZE >> 8;
+    resp[1] = DAP_CONFIG_PACKET_SIZE & 0xff;
+    resp[2] = (DAP_CONFIG_PACKET_SIZE >> 8) & 0xff;
   }
 }
 
@@ -746,8 +742,8 @@ static void dap_transfer_block(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer_abort(uint8_t *req, uint8_t *resp)
 {
-  // This request is handled outside of the normal queue
-  // TODO: verify entire transfer abort mechanism
+  // This request is handled outside of the normal queue.
+  // We should never get here.
   resp[0] = DAP_OK;
   (void)req;
 }
@@ -944,14 +940,17 @@ void dap_init(void)
 }
 
 //-----------------------------------------------------------------------------
-void dap_filter_request(uint8_t *req)
+bool dap_filter_request(uint8_t *req)
 {
   int cmd = req[0];
 
   if (ID_DAP_TRANSFER_ABORT == cmd)
   {
     dap_abort = true;
+    return false;
   }
+
+  return true;
 }
 
 //-----------------------------------------------------------------------------

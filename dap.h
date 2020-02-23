@@ -31,10 +31,11 @@
 
 /*- Includes ----------------------------------------------------------------*/
 #include <stdint.h>
+#include <stdbool.h>
 
 /*- Prototypes --------------------------------------------------------------*/
 void dap_init(void);
-void dap_filter_request(uint8_t *req);
+bool dap_filter_request(uint8_t *req);
 void dap_process_request(uint8_t *req, uint8_t *resp);
 void dap_clock_test(int delay);
 
