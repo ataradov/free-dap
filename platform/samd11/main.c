@@ -107,7 +107,7 @@ static void sys_init(void)
   for (int i = 0; i < 8; i++)
     usb_serial_number[i] = "0123456789ABCDEF"[(sn >> (i * 4)) & 0xf];
 
-  usb_serial_number[9] = 0;
+  usb_serial_number[8] = 0;
 }
 
 //-----------------------------------------------------------------------------
