@@ -76,7 +76,7 @@ typedef struct PACK
 //-----------------------------------------------------------------------------
 extern const usb_device_descriptor_t usb_device_descriptor;
 extern const usb_configuration_hierarchy_t usb_configuration_hierarchy;
-extern const uint8_t usb_hid_report_descriptor[33];
+extern const uint8_t usb_hid_report_descriptor[28];
 extern const usb_string_descriptor_zero_t usb_string_descriptor_zero;
 extern const char *const usb_strings[];
 
