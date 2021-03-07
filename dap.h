@@ -36,7 +36,7 @@
 /*- Prototypes --------------------------------------------------------------*/
 void dap_init(void);
 bool dap_filter_request(uint8_t *req);
-void dap_process_request(uint8_t *req, uint8_t *resp);
+int dap_process_request(uint8_t *req, uint8_t *resp);
 void dap_clock_test(int delay);
 
 #endif // _DAP_H_

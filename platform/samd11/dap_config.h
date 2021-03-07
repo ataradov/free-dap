@@ -63,7 +63,7 @@
 #define DAP_CONFIG_VENDOR_STR          "Alex Taradov"
 #define DAP_CONFIG_PRODUCT_STR         "Generic CMSIS-DAP Adapter"
 #define DAP_CONFIG_SER_NUM_STR         usb_serial_number
-#define DAP_CONFIG_FW_VER_STR          "v0.1"
+#define DAP_CONFIG_FW_VER_STR          "v0.3"
 #define DAP_CONFIG_DEVICE_VENDOR_STR   NULL
 #define DAP_CONFIG_DEVICE_NAME_STR     NULL
 
@@ -73,7 +73,7 @@
 #define DAP_CONFIG_DELAY_CONSTANT      4700
 
 // A threshold for switching to fast clock (no added delays)
-// This is the frequency produced by dap_clock_test(1) on the SWCLK pin 
+// This is the frequency produced by dap_clock_test(1) on the SWCLK pin
 #define DAP_CONFIG_FAST_CLOCK          3600000 // Hz
 
 /*- Prototypes --------------------------------------------------------------*/
