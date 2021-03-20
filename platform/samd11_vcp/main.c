@@ -47,6 +47,7 @@
 
 HAL_GPIO_PIN(VCP_STATUS,       A, 2);
 HAL_GPIO_PIN(DAP_STATUS,       A, 4);
+HAL_GPIO_PIN(BOOT_ENTER,       A, 31);
 
 /*- Variables ---------------------------------------------------------------*/
 static alignas(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
@@ -177,6 +178,7 @@ void usb_cdc_control_line_state_update(int line_state)
 
   // TODO: actually open/close the port?
   app_vcp_open = status;
+  app_send_buffer_ptr = 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -258,7 +260,7 @@ bool usb_class_handle_request(usb_request_t *request)
     return true;
   else if (usb_hid_handle_request(request))
     return true;
-  else 
+  else
     return false;
 }
 
@@ -302,6 +304,9 @@ int main(void)
   HAL_GPIO_DAP_STATUS_out();
   HAL_GPIO_DAP_STATUS_set();
 
+  HAL_GPIO_BOOT_ENTER_in();
+  HAL_GPIO_BOOT_ENTER_pullup();
+
   while (1)
   {
     sys_time_task();
@@ -310,6 +315,9 @@ int main(void)
     rx_task();
     uart_timer_task();
     status_timer_task();
+
+    if (0 == HAL_GPIO_BOOT_ENTER_read())
+      NVIC_SystemReset();
   }
 
   return 0;

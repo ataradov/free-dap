@@ -48,6 +48,8 @@
   #error Undefined board
 #endif
 
+HAL_GPIO_PIN(BOOT_ENTER, A, 31);
+
 #define APP_EP_SEND    1
 #define APP_EP_RECV    2
 
@@ -166,12 +168,19 @@ void usb_configuration_callback(int config)
 //-----------------------------------------------------------------------------
 int main(void)
 {
+  HAL_GPIO_BOOT_ENTER_in();
+  HAL_GPIO_BOOT_ENTER_pullup();
+
   sys_init();
   led_init();
   dap_init();
   usb_init();
 
-  while (1);
+  while (1)
+  {
+    if (0 == HAL_GPIO_BOOT_ENTER_read())
+      NVIC_SystemReset();
+  }
 
   return 0;
 }

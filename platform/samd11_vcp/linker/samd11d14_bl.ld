@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, Alex Taradov <alex@taradov.com>
+ * Copyright (c) 2016-2017, Alex Taradov <alex@taradov.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,8 +28,8 @@
 
 MEMORY
 {
-  flash (rx) : ORIGIN = 0x00000000, LENGTH = 0x4000 /* 16k */
-  ram  (rwx) : ORIGIN = 0x20000000, LENGTH = 0x1000 /* 4k */
+  flash (rx) : ORIGIN = 0x00001000, LENGTH = 0x3000
+  ram  (rwx) : ORIGIN = 0x20000000, LENGTH = 0x1000
 }
 
 __top_flash = ORIGIN(flash) + LENGTH(flash);
@@ -80,4 +80,3 @@ SECTIONS
 
   PROVIDE(_stack_top = __top_ram - 0);
 }
-
