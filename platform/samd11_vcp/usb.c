@@ -31,7 +31,7 @@
 #include <stdbool.h>
 #include <stdalign.h>
 #include "samd11.h"
-#include "hal_gpio.h"
+#include "hal_config.h"
 #include "utils.h"
 #include "nvm_data.h"
 #include "usb.h"
@@ -39,9 +39,6 @@
 #include "usb_descriptors.h"
 
 /*- Definitions -------------------------------------------------------------*/
-HAL_GPIO_PIN(USB_DM,   A, 24);
-HAL_GPIO_PIN(USB_DP,   A, 25);
-
 enum
 {
   USB_DEVICE_EPCFG_EPTYPE_DISABLED    = 0,

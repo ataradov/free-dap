@@ -33,7 +33,7 @@
 #include <stdalign.h>
 #include <string.h>
 #include "samd11.h"
-#include "hal_gpio.h"
+#include "hal_config.h"
 #include "nvm_data.h"
 #include "usb.h"
 #include "uart.h"
@@ -44,10 +44,6 @@
 #define USB_BUFFER_SIZE        64
 #define UART_WAIT_TIMEOUT      10 // ms
 #define STATUS_TIMEOUT         250 // ms
-
-HAL_GPIO_PIN(VCP_STATUS,       A, 2);
-HAL_GPIO_PIN(DAP_STATUS,       A, 4);
-HAL_GPIO_PIN(BOOT_ENTER,       A, 31);
 
 /*- Variables ---------------------------------------------------------------*/
 static alignas(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
