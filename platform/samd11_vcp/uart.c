@@ -33,24 +33,12 @@
 #include <stdbool.h>
 #include <string.h>
 #include "samd11.h"
-#include "hal_gpio.h"
+#include "hal_config.h"
 #include "uart.h"
 #include "usb_cdc.h"
 
 /*- Definitions -------------------------------------------------------------*/
 #define UART_BUF_SIZE            256
-
-HAL_GPIO_PIN(UART_TX,            A, 8);
-HAL_GPIO_PIN(UART_RX,            A, 5);
-
-#define UART_SERCOM              SERCOM0
-#define UART_SERCOM_PMUX         PORT_PMUX_PMUXE_D_Val
-#define UART_SERCOM_GCLK_ID      SERCOM0_GCLK_ID_CORE
-#define UART_SERCOM_APBCMASK     PM_APBCMASK_SERCOM0
-#define UART_SERCOM_IRQ_INDEX    SERCOM0_IRQn
-#define UART_SERCOM_IRQ_HANDLER  irq_handler_sercom0
-#define UART_SERCOM_TXPO         1
-#define UART_SERCOM_RXPO         1
 
 /*- Types ------------------------------------------------------------------*/
 typedef struct

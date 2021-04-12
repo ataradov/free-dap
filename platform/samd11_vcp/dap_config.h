@@ -31,13 +31,9 @@
 
 /*- Includes ----------------------------------------------------------------*/
 #include "samd11.h"
-#include "hal_gpio.h"
+#include "hal_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
-HAL_GPIO_PIN(SWCLK_TCK,    A, 14)
-HAL_GPIO_PIN(SWDIO_TMS,    A, 15)
-HAL_GPIO_PIN(nRESET,       A, 9)
-
 #define DAP_CONFIG_ENABLE_SWD
 //#define DAP_CONFIG_ENABLE_JTAG
 
