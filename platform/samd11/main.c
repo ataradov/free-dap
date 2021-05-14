@@ -40,28 +40,15 @@
 #include "dap_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
-#if defined(BOARD_SWD_USB_MINI)
-  HAL_GPIO_PIN(LED, A, 14);
-#elif defined(BOARD_SWD_USB_STD)
-  HAL_GPIO_PIN(LED, A, 4);
-#else
-  #error Undefined board
-#endif
-
+HAL_GPIO_PIN(LED,        A, 4);
 HAL_GPIO_PIN(BOOT_ENTER, A, 31);
 
 #define APP_EP_SEND    1
 #define APP_EP_RECV    2
 
-#if defined(BOARD_SWD_USB_MINI)
-  #define APP_PWM_PER    0xffff
-  #define APP_PWM_DIM    0xf000
-  #define APP_PWM_BRIGHT 0
-#elif defined(BOARD_SWD_USB_STD)
-  #define APP_PWM_PER    0xffff
-  #define APP_PWM_DIM    0x1000
-  #define APP_PWM_BRIGHT 0xf000
-#endif
+#define APP_PWM_PER    0xffff
+#define APP_PWM_DIM    0x1000
+#define APP_PWM_BRIGHT 0xf000
 
 /*- Variables ---------------------------------------------------------------*/
 static alignas(4) uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
@@ -80,7 +67,7 @@ static void sys_init(void)
   SYSCTRL->INTFLAG.reg = SYSCTRL_INTFLAG_BOD33RDY | SYSCTRL_INTFLAG_BOD33DET |
       SYSCTRL_INTFLAG_DFLLRDY;
 
-  NVMCTRL->CTRLB.bit.RWS = 2;
+  NVMCTRL->CTRLB.bit.RWS = 1;
 
   coarse = NVM_READ_CAL(NVM_DFLL48M_COARSE_CAL);
   fine = NVM_READ_CAL(NVM_DFLL48M_FINE_CAL);
@@ -150,7 +137,8 @@ void usb_send_callback(void)
 //-----------------------------------------------------------------------------
 void usb_recv_callback(void)
 {
-  dap_process_request(app_request_buffer, app_response_buffer);
+  dap_process_request(app_request_buffer, DAP_CONFIG_PACKET_SIZE,
+      app_response_buffer, DAP_CONFIG_PACKET_SIZE);
 
   usb_send(APP_EP_SEND, app_response_buffer, sizeof(app_response_buffer), usb_send_callback);
 
@@ -184,4 +172,5 @@ int main(void)
 
   return 0;
 }
+
 

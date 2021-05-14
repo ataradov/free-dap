@@ -59,7 +59,7 @@ static void sys_init(void)
   SYSCTRL->INTFLAG.reg = SYSCTRL_INTFLAG_BOD33RDY | SYSCTRL_INTFLAG_BOD33DET |
       SYSCTRL_INTFLAG_DFLLRDY;
 
-  NVMCTRL->CTRLB.bit.RWS = 2;
+  NVMCTRL->CTRLB.bit.RWS = 1;
 
   coarse = NVM_READ_CAL(NVM_DFLL48M_COARSE_CAL);
   fine = NVM_READ_CAL(NVM_DFLL48M_FINE_CAL);
@@ -89,10 +89,9 @@ void usb_send_callback(void)
 //-----------------------------------------------------------------------------
 void usb_recv_callback(void)
 {
-  dap_process_request(app_request_buffer, app_response_buffer);
-
+  dap_process_request(app_request_buffer, sizeof(app_request_buffer),
+      app_response_buffer, sizeof(app_response_buffer));
   usb_send(APP_EP_SEND, app_response_buffer, sizeof(app_response_buffer), usb_send_callback);
-
   usb_recv(APP_EP_RECV, app_request_buffer, sizeof(app_request_buffer), usb_recv_callback);
 }
 

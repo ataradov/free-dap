@@ -231,8 +231,8 @@ static void dap_task(void)
   if (!app_request_valid[app_request_rd_ptr])
     return;
 
-  dap_process_request(app_request_buffer[app_request_rd_ptr],
-      app_response_buffer[app_response_wr_ptr]);
+  dap_process_request(app_request_buffer[app_request_rd_ptr], DAP_CONFIG_PACKET_SIZE,
+      app_response_buffer[app_response_wr_ptr], DAP_CONFIG_PACKET_SIZE);
 
   app_response_valid[app_response_wr_ptr] = true;
   app_response_wr_ptr = (app_response_wr_ptr + 1) % DAP_CONFIG_PACKET_COUNT;

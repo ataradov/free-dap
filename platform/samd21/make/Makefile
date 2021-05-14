@@ -15,16 +15,18 @@ else
   MKDIR = mkdir
 endif
 
-CFLAGS += -W -Wall -Wextra --std=gnu99 -O2
+CFLAGS += -W -Wall -Wextra --std=gnu11 -Os
 CFLAGS += -fno-diagnostics-show-caret
 CFLAGS += -fdata-sections -ffunction-sections
 CFLAGS += -funsigned-char -funsigned-bitfields
 CFLAGS += -mcpu=cortex-m0plus -mthumb
 CFLAGS += -MD -MP -MT $(BUILD)/$(*F).o -MF $(BUILD)/$(@F).d
+CFLAGS += -flto
 
 LDFLAGS += -mcpu=cortex-m0plus -mthumb
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,--script=../linker/samd21j18.ld
+LDFLAGS += -flto
 
 INCLUDES += \
   -I../include \
@@ -42,7 +44,7 @@ SRCS += \
 DEFINES += \
   -D__SAMD21J18A__ \
   -DDONT_USE_CMSIS_INIT \
-  -DF_CPU=48000000 
+  -DF_CPU=48000000
 
 CFLAGS += $(INCLUDES) $(DEFINES)
 

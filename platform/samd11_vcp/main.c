@@ -237,14 +237,15 @@ void uart_serial_state_update(int state)
 //-----------------------------------------------------------------------------
 void usb_hid_send_callback(void)
 {
-  usb_hid_recv(app_request_buffer, sizeof(app_request_buffer));
+  usb_hid_recv(app_request_buffer, DAP_CONFIG_PACKET_SIZE);
 }
 
 //-----------------------------------------------------------------------------
 void usb_hid_recv_callback(int size)
 {
   app_dap_event = true;
-  dap_process_request(app_request_buffer, app_response_buffer);
+  dap_process_request(app_request_buffer, sizeof(app_request_buffer),
+      app_response_buffer, sizeof(app_response_buffer));
   usb_hid_send(app_response_buffer, sizeof(app_response_buffer));
   (void)size;
 }

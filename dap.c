@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, Alex Taradov <alex@taradov.com>
+ * Copyright (c) 2016-2021, Alex Taradov <alex@taradov.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,15 +33,11 @@
 #include "dap_config.h"
 #include "dap.h"
 
-#ifdef DAP_CONFIG_ENABLE_JTAG
-#error JTAG is not supported. If you have a real need for it, please contact me.
-#endif
-
 /*- Definitions -------------------------------------------------------------*/
 enum
 {
   ID_DAP_INFO               = 0x00,
-  ID_DAP_LED                = 0x01,
+  ID_DAP_HOST_STATUS        = 0x01,
   ID_DAP_CONNECT            = 0x02,
   ID_DAP_DISCONNECT         = 0x03,
   ID_DAP_TRANSFER_CONFIGURE = 0x04,
@@ -51,15 +47,34 @@ enum
   ID_DAP_WRITE_ABORT        = 0x08,
   ID_DAP_DELAY              = 0x09,
   ID_DAP_RESET_TARGET       = 0x0a,
+
   ID_DAP_SWJ_PINS           = 0x10,
   ID_DAP_SWJ_CLOCK          = 0x11,
   ID_DAP_SWJ_SEQUENCE       = 0x12,
+
   ID_DAP_SWD_CONFIGURE      = 0x13,
+  ID_DAP_SWD_SEQUENCE       = 0x1d,
+
   ID_DAP_JTAG_SEQUENCE      = 0x14,
   ID_DAP_JTAG_CONFIGURE     = 0x15,
   ID_DAP_JTAG_IDCODE        = 0x16,
+
+  ID_DAP_SWO_TRANSPORT      = 0x17,
+  ID_DAP_SWO_MODE           = 0x18,
+  ID_DAP_SWO_BAUDRATE       = 0x19,
+  ID_DAP_SWO_CONTROL        = 0x1a,
+  ID_DAP_SWO_STATUS         = 0x1b,
+  ID_DAP_SWO_EXT_STATUS     = 0x1e,
+  ID_DAP_SWO_DATA           = 0x1c,
+
+  ID_DAP_QUEUE_COMMANDS     = 0x7e,
+  ID_DAP_EXECUTE_COMMANDS   = 0x7f,
+
   ID_DAP_VENDOR_0           = 0x80,
   ID_DAP_VENDOR_31          = 0x9f,
+  ID_DAP_VENDOR_EX_FIRS     = 0xa0,
+  ID_DAP_VENDOR_EX_LAST     = 0xfe,
+
   ID_DAP_INVALID            = 0xff,
 };
 
@@ -68,10 +83,13 @@ enum
   DAP_INFO_VENDOR           = 0x01,
   DAP_INFO_PRODUCT          = 0x02,
   DAP_INFO_SER_NUM          = 0x03,
-  DAP_INFO_FW_VER           = 0x04,
+  DAP_INFO_FW_VER           = 0x04, // DAP_INFO_CMSIS_DAP_VER
   DAP_INFO_DEVICE_VENDOR    = 0x05,
   DAP_INFO_DEVICE_NAME      = 0x06,
+  DAP_INFO_PRODUCT_FW_VER   = 0x07,
   DAP_INFO_CAPABILITIES     = 0xf0,
+  DAP_INFO_TIMESTAMP_CLOCK  = 0xf1,
+  DAP_INFO_SWO_BUFFER_SIZE  = 0xfd,
   DAP_INFO_PACKET_COUNT     = 0xfe,
   DAP_INFO_PACKET_SIZE      = 0xff,
 };
@@ -84,6 +102,7 @@ enum
   DAP_TRANSFER_A3           = 1 << 3,
   DAP_TRANSFER_MATCH_VALUE  = 1 << 4,
   DAP_TRANSFER_MATCH_MASK   = 1 << 5,
+  DAP_TRANSFER_JTAG_ABORT   = 1 << 16,
 };
 
 enum
@@ -124,13 +143,33 @@ enum
 {
   SWD_DP_R_IDCODE           = 0x00,
   SWD_DP_W_ABORT            = 0x00,
-  SWD_DP_R_CTRL_STAT        = 0x04,
-  SWD_DP_W_CTRL_STAT        = 0x04, // When CTRLSEL == 0
-  SWD_DP_W_WCR              = 0x04, // When CTRLSEL == 1
-  SWD_DP_R_RESEND           = 0x08,
-  SWD_DP_W_SELECT           = 0x08,
   SWD_DP_R_RDBUFF           = 0x0c,
 };
+
+enum
+{
+  JTAG_ABORT                = 0x08,
+  JTAG_DPACC                = 0x0a,
+  JTAG_APACC                = 0x0b,
+  JTAG_IDCODE               = 0x0e,
+  JTAG_BYPASS               = 0x0f,
+  JTAG_INVALID              = 0xff,
+};
+
+enum
+{
+  JTAG_SEQUENCE_COUNT       = 0x3f,
+  JTAG_SEQUENCE_TMS         = 0x40,
+  JTAG_SEQUENCE_TDO         = 0x80,
+};
+
+enum
+{
+  SWD_SEQUENCE_COUNT        = 0x3f,
+  SWD_SEQUENCE_DIN          = 0x80,
+};
+
+#define ARM_JTAG_IR_LENGTH  4
 
 /*- Constants ---------------------------------------------------------------*/
 static const char * const dap_info_strings[] =
@@ -145,30 +184,46 @@ static const char * const dap_info_strings[] =
 
 /*- Variables ---------------------------------------------------------------*/
 static int dap_port;
-static bool dap_abort;
+static volatile bool dap_abort;
 static uint32_t dap_match_mask;
 static int dap_idle_cycles;
 static int dap_retry_count;
 static int dap_match_retry_count;
 static int dap_clock_delay;
 
-static void (*dap_swd_clock)(int);
+static void (*dap_swj_run)(int);
 static void (*dap_swd_write)(uint32_t, int);
 static uint32_t (*dap_swd_read)(int);
 
-#ifdef DAP_CONFIG_ENABLE_SWD
+#ifdef DAP_CONFIG_ENABLE_JTAG
+static uint32_t (*dap_jtag_write)(uint32_t, int);
+static uint32_t (*dap_jtag_read)(int);
+static uint32_t (*dap_jtag_rdwr)(uint32_t, int);
+#endif
+
+static uint8_t *dap_req_buf;
+static int dap_req_size;
+static int dap_req_ptr;
+
+static uint8_t *dap_resp_buf;
+static int dap_resp_size;
+static int dap_resp_ptr;
+
+static bool dap_buf_error;
+
 static int dap_swd_turnaround;
 static bool dap_swd_data_phase;
+
+#ifdef DAP_CONFIG_ENABLE_JTAG
+static int dap_jtag_dev_count;
+static int dap_jtag_dev_index;
+static int dap_jtag_ir_length[DAP_CONFIG_JTAG_DEV_COUNT];
+static int dap_jtag_ir_before[DAP_CONFIG_JTAG_DEV_COUNT];
+static int dap_jtag_ir_after[DAP_CONFIG_JTAG_DEV_COUNT];
+static int dap_jtag_ir;
 #endif
 
 /*- Implementations ---------------------------------------------------------*/
-
-//-----------------------------------------------------------------------------
-static inline void dap_delay_loop(int delay)
-{
-  while (--delay)
-    asm("nop");
-}
 
 //-----------------------------------------------------------------------------
 static void dap_delay_us(int delay)
@@ -176,113 +231,62 @@ static void dap_delay_us(int delay)
   while (delay)
   {
     int del = (delay > 100000) ? 100000 : delay;
-
-    dap_delay_loop((DAP_CONFIG_DELAY_CONSTANT * 2 * del) / 1000);
-
+    DAP_CONFIG_DELAY((DAP_CONFIG_DELAY_CONSTANT * 2 * del) / 1000);
     delay -= del;
   }
 }
 
 //-----------------------------------------------------------------------------
-static void dap_swd_clock_slow(int cycles)
-{
-  while (cycles--)
-  {
-    DAP_CONFIG_SWCLK_TCK_clr();
-    dap_delay_loop(dap_clock_delay);
-    DAP_CONFIG_SWCLK_TCK_set();
-    dap_delay_loop(dap_clock_delay);
+#define DAP_SWJ_FN(ver, delay) \
+  DAP_CONFIG_PERFORMANCE_ATTR						\
+  static void dap_swj_run_##ver(int cycles)				\
+  {									\
+    while (cycles--)							\
+    {									\
+      DAP_CONFIG_SWCLK_TCK_clr();					\
+      delay(dap_clock_delay);						\
+      DAP_CONFIG_SWCLK_TCK_set();					\
+      delay(dap_clock_delay);						\
+    }									\
   }
-}
+DAP_SWJ_FN(slow, DAP_CONFIG_DELAY)
+DAP_SWJ_FN(fast, (void))
 
 //-----------------------------------------------------------------------------
-static void dap_swd_write_slow(uint32_t value, int size)
-{
-  for (int i = 0; i < size; i++)
-  {
-    DAP_CONFIG_SWDIO_TMS_write(value & 1);
-    DAP_CONFIG_SWCLK_TCK_clr();
-    dap_delay_loop(dap_clock_delay);
-    DAP_CONFIG_SWCLK_TCK_set();
-    dap_delay_loop(dap_clock_delay);
-    value >>= 1;
-  }
-}
-
-//-----------------------------------------------------------------------------
-static uint32_t dap_swd_read_slow(int size)
-{
-  uint32_t value = 0;
-
-  for (int i = 0; i < size; i++)
-  {
-    DAP_CONFIG_SWCLK_TCK_clr();
-    dap_delay_loop(dap_clock_delay);
-    value |= ((uint32_t)DAP_CONFIG_SWDIO_TMS_read() << i);
-    DAP_CONFIG_SWCLK_TCK_set();
-    dap_delay_loop(dap_clock_delay);
-  }
-
-  return value;
-}
-
-//-----------------------------------------------------------------------------
-static void dap_swd_clock_fast(int cycles)
-{
-  while (cycles--)
-  {
-    DAP_CONFIG_SWCLK_TCK_clr();
-    DAP_CONFIG_SWCLK_TCK_set();
-  }
-}
-
-//-----------------------------------------------------------------------------
-static void dap_swd_write_fast(uint32_t value, int size)
-{
-  for (int i = 0; i < size; i++)
-  {
-    DAP_CONFIG_SWDIO_TMS_write(value & 1);
-    DAP_CONFIG_SWCLK_TCK_clr();
-    value >>= 1;
-    DAP_CONFIG_SWCLK_TCK_set();
-  }
-}
-
-//-----------------------------------------------------------------------------
-static uint32_t dap_swd_read_fast(int size)
-{
-  uint32_t value = 0;
-  uint32_t bit;
-
-  for (int i = 0; i < size; i++)
-  {
-    DAP_CONFIG_SWCLK_TCK_clr();
-    bit = DAP_CONFIG_SWDIO_TMS_read();
-    DAP_CONFIG_SWCLK_TCK_set();
-    value |= (bit << i);
+#define DAP_SWD_FN(ver, delay) \
+  DAP_CONFIG_PERFORMANCE_ATTR						\
+  static void dap_swd_write_##ver(uint32_t value, int size)		\
+  {									\
+    for (int i = 0; i < size; i++)					\
+    {									\
+      DAP_CONFIG_SWDIO_TMS_write(value & 1);				\
+      DAP_CONFIG_SWCLK_TCK_clr();					\
+      delay(dap_clock_delay);						\
+      DAP_CONFIG_SWCLK_TCK_set();					\
+      delay(dap_clock_delay);						\
+      value >>= 1;							\
+    }									\
+  }									\
+									\
+  DAP_CONFIG_PERFORMANCE_ATTR						\
+  static uint32_t dap_swd_read_##ver(int size)				\
+  {									\
+    uint32_t value = 0;							\
+    uint32_t bit;							\
+    for (int i = 0; i < size; i++)					\
+    {									\
+      DAP_CONFIG_SWCLK_TCK_clr();					\
+      delay(dap_clock_delay);						\
+      bit = DAP_CONFIG_SWDIO_TMS_read();				\
+      DAP_CONFIG_SWCLK_TCK_set();					\
+      delay(dap_clock_delay);						\
+      value |= (bit << i);						\
+    }									\
+    return value;							\
   }
 
-  return value;
-}
-
-//-----------------------------------------------------------------------------
-static void dap_setup_clock(int freq)
-{
-  if (freq > DAP_CONFIG_FAST_CLOCK)
-  {
-    dap_clock_delay = 1;
-    dap_swd_clock = dap_swd_clock_fast;
-    dap_swd_write = dap_swd_write_fast;
-    dap_swd_read = dap_swd_read_fast;
-  }
-  else
-  {
-    dap_clock_delay = (DAP_CONFIG_DELAY_CONSTANT * 1000) / freq;
-    dap_swd_clock = dap_swd_clock_slow;
-    dap_swd_write = dap_swd_write_slow;
-    dap_swd_read = dap_swd_read_slow;
-  }
-}
+DAP_SWD_FN(slow, DAP_CONFIG_DELAY)
+DAP_SWD_FN(fast, (void))
 
 //-----------------------------------------------------------------------------
 static inline uint32_t dap_parity(uint32_t value)
@@ -301,11 +305,13 @@ static int dap_swd_operation(int req, uint32_t *data)
   uint32_t value;
   int ack = 0;
 
+  req &= (DAP_TRANSFER_APnDP | DAP_TRANSFER_RnW | DAP_TRANSFER_A2 | DAP_TRANSFER_A3);
+
   dap_swd_write(0x81 | (dap_parity(req) << 5) | (req << 1), 8);
 
   DAP_CONFIG_SWDIO_TMS_in();
 
-  dap_swd_clock(dap_swd_turnaround);
+  dap_swj_run(dap_swd_turnaround);
 
   ack = dap_swd_read(3);
 
@@ -321,13 +327,13 @@ static int dap_swd_operation(int req, uint32_t *data)
       if (data)
         *data = value;
 
-      dap_swd_clock(dap_swd_turnaround);
+      dap_swj_run(dap_swd_turnaround);
 
       DAP_CONFIG_SWDIO_TMS_out();
     }
     else
     {
-      dap_swd_clock(dap_swd_turnaround);
+      dap_swj_run(dap_swd_turnaround);
 
       DAP_CONFIG_SWDIO_TMS_out();
 
@@ -336,28 +342,28 @@ static int dap_swd_operation(int req, uint32_t *data)
     }
 
     DAP_CONFIG_SWDIO_TMS_write(0);
-    dap_swd_clock(dap_idle_cycles);
+    dap_swj_run(dap_idle_cycles);
   }
 
   else if (DAP_TRANSFER_WAIT == ack || DAP_TRANSFER_FAULT == ack)
   {
     if (dap_swd_data_phase && (req & DAP_TRANSFER_RnW))
-      dap_swd_clock(32 + 1);
+      dap_swj_run(32 + 1);
 
-    dap_swd_clock(dap_swd_turnaround);
+    dap_swj_run(dap_swd_turnaround);
 
     DAP_CONFIG_SWDIO_TMS_out();
 
     if (dap_swd_data_phase && (0 == (req & DAP_TRANSFER_RnW)))
     {
       DAP_CONFIG_SWDIO_TMS_write(0);
-      dap_swd_clock(32 + 1);
+      dap_swj_run(32 + 1);
     }
   }
 
   else
   {
-    dap_swd_clock(dap_swd_turnaround + 32 + 1);
+    dap_swj_run(dap_swd_turnaround + 32 + 1);
   }
 
   DAP_CONFIG_SWDIO_TMS_write(1);
@@ -365,16 +371,255 @@ static int dap_swd_operation(int req, uint32_t *data)
   return ack;
 }
 
+#ifdef DAP_CONFIG_ENABLE_JTAG
 //-----------------------------------------------------------------------------
-static int dap_swd_transfer_word(int req, uint32_t *data)
-{
-  int ack;
+#define DAP_JTAG_FN(ver, delay) \
+  DAP_CONFIG_PERFORMANCE_ATTR						\
+  static uint32_t dap_jtag_write_##ver(uint32_t value, int size)	\
+  {									\
+    for (int i = 0; i < size; i++)					\
+    {									\
+      DAP_CONFIG_TDI_write(value & 1);					\
+      DAP_CONFIG_SWCLK_TCK_clr();					\
+      delay(dap_clock_delay);						\
+      DAP_CONFIG_SWCLK_TCK_set();					\
+      delay(dap_clock_delay);						\
+      value >>= 1;							\
+    }									\
+    return value;							\
+  }									\
+									\
+  DAP_CONFIG_PERFORMANCE_ATTR						\
+  static uint32_t dap_jtag_read_##ver(int size)				\
+  {									\
+    uint32_t value = 0;							\
+    uint32_t bit;							\
+    for (int i = 0; i < size; i++)					\
+    {									\
+      DAP_CONFIG_SWCLK_TCK_clr();					\
+      delay(dap_clock_delay);						\
+      bit = DAP_CONFIG_TDO_read();					\
+      DAP_CONFIG_SWCLK_TCK_set();					\
+      delay(dap_clock_delay);						\
+      value |= (bit << i);						\
+    }									\
+    return value;							\
+  }									\
+									\
+  DAP_CONFIG_PERFORMANCE_ATTR						\
+  static uint32_t dap_jtag_rdwr_##ver(uint32_t value, int size)		\
+  {									\
+    uint32_t rvalue = 0;						\
+    uint32_t bit;							\
+    for (int i = 0; i < size; i++)					\
+    {									\
+      DAP_CONFIG_TDI_write(value & 1);					\
+      DAP_CONFIG_SWCLK_TCK_clr();					\
+      delay(dap_clock_delay);						\
+      bit = DAP_CONFIG_TDO_read();					\
+      DAP_CONFIG_SWCLK_TCK_set();					\
+      delay(dap_clock_delay);						\
+      value >>= 1;							\
+      rvalue |= (bit << i);						\
+    }									\
+    return rvalue;							\
+  }
 
-  req &= (DAP_TRANSFER_APnDP | DAP_TRANSFER_RnW | DAP_TRANSFER_A2 | DAP_TRANSFER_A3);
+DAP_JTAG_FN(slow, DAP_CONFIG_DELAY)
+DAP_JTAG_FN(fast, (void))
+
+//-----------------------------------------------------------------------------
+static void dap_jtag_write_ir(int ir)
+{
+  int len = dap_jtag_ir_length[dap_jtag_dev_index];
+
+  DAP_CONFIG_SWDIO_TMS_write(1);
+  dap_swj_run(2); // -> Select-IR-Scan
+  DAP_CONFIG_SWDIO_TMS_write(0);
+  dap_swj_run(2); // -> Shift-IR
+
+  DAP_CONFIG_TDI_write(1);
+  dap_swj_run(dap_jtag_ir_before[dap_jtag_dev_index]);
+
+  ir = dap_jtag_write(ir, len-1);
+
+  if (dap_jtag_ir_after[dap_jtag_dev_index])
+  {
+    dap_jtag_write(ir, 1);
+
+    DAP_CONFIG_TDI_write(1);
+    dap_swj_run(dap_jtag_ir_after[dap_jtag_dev_index]-1);
+
+    DAP_CONFIG_SWDIO_TMS_write(1);
+    dap_swj_run(1); // -> Exit1-IR
+  }
+  else
+  {
+    DAP_CONFIG_SWDIO_TMS_write(1);
+    dap_jtag_write(ir, 1); // -> Exit1-IR
+  }
+
+  dap_swj_run(1); // -> Update-IR
+  DAP_CONFIG_SWDIO_TMS_write(0);
+  dap_swj_run(1); // -> Idle
+  DAP_CONFIG_TDI_write(1);
+}
+
+//-----------------------------------------------------------------------------
+static int dap_jtag_operation(int req, uint32_t *data)
+{
+  int ack, ir;
+
+  if (DAP_TRANSFER_JTAG_ABORT == req)
+    ir = JTAG_ABORT;
+  else
+    ir = (req & DAP_TRANSFER_APnDP) ? JTAG_APACC : JTAG_DPACC;
+
+  if (ir != dap_jtag_ir)
+  {
+    dap_jtag_ir = ir;
+    dap_jtag_write_ir(ir);
+  }
+
+  DAP_CONFIG_SWDIO_TMS_write(1);
+  dap_swj_run(1); // -> Select-DR-Scan
+  DAP_CONFIG_SWDIO_TMS_write(0);
+  dap_swj_run(2 + dap_jtag_dev_index); // -> Shift-DR
+
+  ack = dap_jtag_rdwr(req >> 1, 3);
+
+  if (ack == 0x2)
+    ack = DAP_TRANSFER_OK; // or FAULT
+  else if (ack == 0x1)
+    ack = DAP_TRANSFER_WAIT;
+  else
+    ack = DAP_TRANSFER_INVALID;
+
+  if (DAP_TRANSFER_OK == ack)
+  {
+    int cnt = dap_jtag_dev_count - dap_jtag_dev_index - 1;
+    uint32_t value;
+
+    if (req & DAP_TRANSFER_RnW)
+    {
+      if (cnt)
+      {
+        value = dap_jtag_read(32);
+        dap_swj_run(cnt-1);
+        DAP_CONFIG_SWDIO_TMS_write(1);
+        dap_swj_run(1); // -> Exit1-DR
+      }
+      else
+      {
+        value = dap_jtag_read(31);
+        DAP_CONFIG_SWDIO_TMS_write(1);
+        value |= (dap_jtag_read(1) << 31); // -> Exit1-DR
+      }
+
+      if (data)
+        *data = value;
+    }
+    else
+    {
+      value = *data;
+
+      if (cnt)
+      {
+        dap_jtag_write(value, 32);
+        dap_swj_run(cnt-1);
+        DAP_CONFIG_SWDIO_TMS_write(1);
+        dap_swj_run(1); // -> Exit1-DR
+      }
+      else
+      {
+        value = dap_jtag_write(value, 31);
+        DAP_CONFIG_SWDIO_TMS_write(1);
+        dap_jtag_write(value, 1); // -> Exit1-DR
+      }
+    }
+  }
+  else // Not OK
+  {
+    DAP_CONFIG_SWDIO_TMS_write(1);
+    dap_swj_run(1); // -> Exit1-DR
+  }
+
+  dap_swj_run(1); // -> Update-DR
+  DAP_CONFIG_SWDIO_TMS_write(0);
+  dap_swj_run(1); // -> Idle
+  DAP_CONFIG_TDI_write(1);
+
+  dap_swj_run(dap_idle_cycles);
+
+  return ack;
+}
+#endif // DAP_CONFIG_ENABLE_JTAG
+
+//-----------------------------------------------------------------------------
+static void dap_setup_clock(int freq)
+{
+  if (freq > DAP_CONFIG_FAST_CLOCK)
+  {
+    dap_clock_delay = 0;
+    dap_swj_run     = dap_swj_run_fast;
+    dap_swd_write   = dap_swd_write_fast;
+    dap_swd_read    = dap_swd_read_fast;
+#ifdef DAP_CONFIG_ENABLE_JTAG
+    dap_jtag_write  = dap_jtag_write_fast;
+    dap_jtag_read   = dap_jtag_read_fast;
+    dap_jtag_rdwr   = dap_jtag_rdwr_fast;
+#endif
+  }
+  else
+  {
+    dap_clock_delay = (DAP_CONFIG_DELAY_CONSTANT * 1000) / freq;
+    dap_swj_run     = dap_swj_run_slow;
+    dap_swd_write   = dap_swd_write_slow;
+    dap_swd_read    = dap_swd_read_slow;
+#ifdef DAP_CONFIG_ENABLE_JTAG
+    dap_jtag_write  = dap_jtag_write_slow;
+    dap_jtag_read   = dap_jtag_read_slow;
+    dap_jtag_rdwr   = dap_jtag_rdwr_slow;
+#endif
+  }
+}
+
+//-----------------------------------------------------------------------------
+static bool dap_select_device(int index)
+{
+  if (DAP_PORT_SWD == dap_port)
+    return true;
+
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  if (DAP_PORT_JTAG == dap_port)
+  {
+    if (index >= dap_jtag_dev_count || dap_jtag_ir_length[index] != ARM_JTAG_IR_LENGTH)
+      return false;
+
+    dap_jtag_dev_index = index;
+
+    return true;
+  }
+#endif
+
+  (void)index;
+  return false;
+}
+
+//-----------------------------------------------------------------------------
+static int dap_transfer_word(int req, uint32_t *data)
+{
+  int ack = DAP_TRANSFER_INVALID;
 
   for (int i = 0; i < dap_retry_count; i++)
   {
-    ack = dap_swd_operation(req, data);
+    if (DAP_PORT_SWD == dap_port)
+      ack = dap_swd_operation(req, data);
+
+#ifdef DAP_CONFIG_ENABLE_JTAG
+    else if (DAP_PORT_JTAG == dap_port)
+      ack = dap_jtag_operation(req, data);
+#endif
 
     if (DAP_TRANSFER_WAIT != ack || dap_abort)
       break;
@@ -384,76 +629,285 @@ static int dap_swd_transfer_word(int req, uint32_t *data)
 }
 
 //-----------------------------------------------------------------------------
-static int dap_swd_transfer(uint8_t *req, uint8_t *resp)
+static bool dap_needs_posted_read(int request)
 {
-  int req_count, req_size, resp_count, resp_size, request, ack;
-  uint8_t *req_data, *resp_data;
+  if (0 == (request & DAP_TRANSFER_RnW))
+    return false;
+
+  if (DAP_PORT_SWD == dap_port)
+    return (request & DAP_TRANSFER_APnDP);
+
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  if (DAP_PORT_JTAG == dap_port)
+    return true;
+#endif
+
+  return false;
+}
+
+//-----------------------------------------------------------------------------
+static void dap_buf_init(uint8_t *req, int req_size, uint8_t *resp, int resp_size)
+{
+  dap_req_buf  = req;
+  dap_req_size = req_size;
+  dap_req_ptr  = 0;
+
+  dap_resp_buf  = resp;
+  dap_resp_size = resp_size;
+  dap_resp_ptr  = 0;
+
+  dap_buf_error = false;
+}
+
+//-----------------------------------------------------------------------------
+uint8_t dap_req_get_byte(void)
+{
+  if (dap_buf_error || ((dap_req_size - dap_req_ptr) < (int)sizeof(uint8_t)))
+  {
+    dap_buf_error = true;
+    return 0;
+  }
+
+  return dap_req_buf[dap_req_ptr++];
+}
+
+//-----------------------------------------------------------------------------
+uint16_t dap_req_get_half(void)
+{
+  if (dap_buf_error || ((dap_req_size - dap_req_ptr) < (int)sizeof(uint16_t)))
+  {
+    dap_buf_error = true;
+    return 0;
+  }
+
+  uint16_t value =
+      ((uint16_t)dap_req_buf[dap_req_ptr + 1] << 8) |
+       (uint16_t)dap_req_buf[dap_req_ptr];
+  dap_req_ptr += sizeof(uint16_t);
+
+  return value;
+}
+
+//-----------------------------------------------------------------------------
+uint32_t dap_req_get_word(void)
+{
+  if (dap_buf_error || ((dap_req_size - dap_req_ptr) < (int)sizeof(uint32_t)))
+  {
+    dap_buf_error = true;
+    return 0;
+  }
+
+  uint32_t value =
+      ((uint32_t)dap_req_buf[dap_req_ptr + 3] << 24) |
+      ((uint32_t)dap_req_buf[dap_req_ptr + 2] << 16) |
+      ((uint32_t)dap_req_buf[dap_req_ptr + 1] << 8) |
+       (uint32_t)dap_req_buf[dap_req_ptr];
+  dap_req_ptr += sizeof(uint32_t);
+
+  return value;
+}
+
+//-----------------------------------------------------------------------------
+void dap_resp_add_byte(uint8_t value)
+{
+  if (dap_buf_error || ((dap_resp_size - dap_resp_ptr) < (int)sizeof(uint8_t)))
+  {
+    dap_buf_error = true;
+    return;
+  }
+
+  dap_resp_buf[dap_resp_ptr++] = value;
+}
+
+//-----------------------------------------------------------------------------
+void dap_resp_add_word(uint32_t value)
+{
+  if (dap_buf_error || ((dap_resp_size - dap_resp_ptr) < (int)sizeof(uint32_t)))
+  {
+    dap_buf_error = true;
+    return;
+  }
+
+  dap_resp_buf[dap_resp_ptr + 0] = value;
+  dap_resp_buf[dap_resp_ptr + 1] = value >> 8;
+  dap_resp_buf[dap_resp_ptr + 2] = value >> 16;
+  dap_resp_buf[dap_resp_ptr + 3] = value >> 24;
+  dap_resp_ptr += sizeof(uint32_t);
+}
+
+//-----------------------------------------------------------------------------
+void dap_resp_set_byte(int index, uint8_t value)
+{
+  if (index < dap_resp_ptr)
+    dap_resp_buf[index] = value;
+}
+
+//-----------------------------------------------------------------------------
+static void dap_info(void)
+{
+  int index = dap_req_get_byte();
+
+  if (DAP_INFO_VENDOR <= index && index <= DAP_INFO_DEVICE_NAME)
+  {
+    if (dap_info_strings[index])
+    {
+      const char *str = dap_info_strings[index];
+
+      dap_resp_add_byte(0); // Size placeholder
+
+      while (*str)
+        dap_resp_add_byte(*str++);
+      dap_resp_add_byte(0);
+
+      dap_resp_set_byte(1, dap_resp_ptr-1);
+    }
+    else
+    {
+      dap_resp_add_byte(0);
+    }
+  }
+  else if (DAP_INFO_CAPABILITIES == index)
+  {
+    int cap = DAP_PORT_SWD;
+#ifdef DAP_CONFIG_ENABLE_JTAG
+    cap |= DAP_PORT_JTAG;
+#endif
+    dap_resp_add_byte(1);
+    dap_resp_add_byte(cap);
+  }
+  else if (DAP_INFO_PACKET_COUNT == index)
+  {
+    dap_resp_add_byte(1);
+    dap_resp_add_byte(DAP_CONFIG_PACKET_COUNT);
+  }
+  else if (DAP_INFO_PACKET_SIZE == index)
+  {
+    dap_resp_add_byte(2);
+    dap_resp_add_byte(DAP_CONFIG_PACKET_SIZE & 0xff);
+    dap_resp_add_byte((DAP_CONFIG_PACKET_SIZE >> 8) & 0xff);
+  }
+  else
+  {
+    dap_resp_add_byte(0);
+  }
+}
+
+//-----------------------------------------------------------------------------
+static void dap_host_status(void)
+{
+  int index = dap_req_get_byte();
+  int state = dap_req_get_byte();
+
+  DAP_CONFIG_LED(index, state);
+
+  dap_resp_add_byte(DAP_OK);
+}
+
+//-----------------------------------------------------------------------------
+static void dap_connect(void)
+{
+  int port = dap_req_get_byte();
+
+  if (DAP_PORT_AUTODETECT == port)
+    port = DAP_CONFIG_DEFAULT_PORT;
+
+  dap_port = DAP_PORT_DISABLED;
+
+  if (DAP_PORT_SWD == port)
+  {
+    DAP_CONFIG_CONNECT_SWD();
+    dap_port = DAP_PORT_SWD;
+  }
+
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  else if (DAP_PORT_JTAG == port)
+  {
+    DAP_CONFIG_CONNECT_JTAG();
+    dap_port = DAP_PORT_JTAG;
+  }
+#endif
+
+  dap_resp_add_byte(dap_port);
+}
+
+//-----------------------------------------------------------------------------
+static void dap_disconnect(void)
+{
+  DAP_CONFIG_DISCONNECT();
+
+  dap_port = DAP_PORT_DISABLED;
+
+  dap_resp_add_byte(DAP_OK);
+}
+
+//-----------------------------------------------------------------------------
+static void dap_transfer_configure(void)
+{
+  dap_idle_cycles = dap_req_get_byte();
+  dap_retry_count = dap_req_get_half();
+  dap_match_retry_count = dap_req_get_half();
+
+  dap_resp_add_byte(DAP_OK);
+}
+
+//-----------------------------------------------------------------------------
+static void dap_transfer(void)
+{
+  int req_count, resp_count, request, ack;
   bool posted_read, verify_write;
   uint32_t data, match_value;
 
-  req_count = req[1];
-  req_data = &req[2];
-  req_size = 2;
+  dap_resp_add_byte(0); // Count
+  dap_resp_add_byte(DAP_TRANSFER_INVALID);
 
+  if (!dap_select_device(dap_req_get_byte()))
+    return;
+
+  req_count  = dap_req_get_byte();
   resp_count = 0;
-  resp_data = &resp[2];
-  resp_size = 2;
 
   posted_read = false;
   verify_write = false;
   ack = DAP_TRANSFER_INVALID;
 
-  while (req_count && !dap_abort)
+  for (; req_count && !dap_abort && !dap_buf_error; req_count--, resp_count++)
   {
-    if (req_size == DAP_CONFIG_PACKET_SIZE)
-      break;
-
+    request = dap_req_get_byte();
     verify_write = false;
-    request = req_data[0];
-    req_data++;
-    req_size++;
 
     if (posted_read)
     {
-      if ((request & DAP_TRANSFER_APnDP) && (request & DAP_TRANSFER_RnW))
+      if (dap_needs_posted_read(request))
       {
-        ack = dap_swd_transfer_word(request, &data);
+        ack = dap_transfer_word(request, &data);
       }
       else
       {
-        ack = dap_swd_transfer_word(SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW, &data);
+        ack = dap_transfer_word(SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW, &data);
         posted_read = false;
       }
 
       if (ack != DAP_TRANSFER_OK)
         break;
 
-      if (resp_size > (DAP_CONFIG_PACKET_SIZE-4))
-        break;
+      dap_resp_add_word(data);
 
-      resp_data[0] = data;
-      resp_data[1] = data >> 8;
-      resp_data[2] = data >> 16;
-      resp_data[3] = data >> 24;
-      resp_data += 4;
-      resp_size += 4;
+      if (posted_read)
+        continue;
     }
 
     if (request & DAP_TRANSFER_RnW)
     {
       if (request & DAP_TRANSFER_MATCH_VALUE)
       {
-        if (req_size > (DAP_CONFIG_PACKET_SIZE-4))
-          break;
+        match_value = dap_req_get_word();
 
-        match_value = ((uint32_t)req_data[3] << 24) | ((uint32_t)req_data[2] << 16) |
-                      ((uint32_t)req_data[1] << 8) | req_data[0];
-        req_data += 4;
-        req_size += 4;
+        if (dap_needs_posted_read(request))
+          dap_transfer_word(request, NULL);
 
         for (int i = 0; i < dap_match_retry_count; i++)
         {
-          ack = dap_swd_transfer_word(request, &data);
+          ack = dap_transfer_word(request, &data);
 
           if (DAP_TRANSFER_OK != ack || (data & dap_match_mask) == match_value || dap_abort)
             break;
@@ -465,48 +919,28 @@ static int dap_swd_transfer(uint8_t *req, uint8_t *resp)
         if (ack != DAP_TRANSFER_OK)
           break;
       }
+      else if (dap_needs_posted_read(request))
+      {
+        ack = dap_transfer_word(request, NULL);
+
+        if (ack != DAP_TRANSFER_OK)
+          break;
+
+        posted_read = true;
+      }
       else
       {
-        if (request & DAP_TRANSFER_APnDP)
-        {
-          if (!posted_read)
-          {
-            ack = dap_swd_transfer_word(request, NULL);
+        ack = dap_transfer_word(request, &data);
 
-            if (ack != DAP_TRANSFER_OK)
-              break;
+        if (DAP_TRANSFER_OK != ack)
+          break;
 
-            posted_read = true;
-          }
-        }
-        else
-        {
-          ack = dap_swd_transfer_word(request, &data);
-
-          if (DAP_TRANSFER_OK != ack)
-            break;
-
-          if (resp_size > (DAP_CONFIG_PACKET_SIZE-4))
-            break;
-
-          resp_data[0] = data;
-          resp_data[1] = data >> 8;
-          resp_data[2] = data >> 16;
-          resp_data[3] = data >> 24;
-          resp_data += 4;
-          resp_size += 4;
-        }
+        dap_resp_add_word(data);
       }
     }
-    else
+    else // Write
     {
-      if (req_size > (DAP_CONFIG_PACKET_SIZE-4))
-        break;
-
-      data = ((uint32_t)req_data[3] << 24) | ((uint32_t)req_data[2] << 16) |
-             ((uint32_t)req_data[1] << 8) | req_data[0];
-      req_data += 4;
-      req_size += 4;
+      data = dap_req_get_word();
 
       if (request & DAP_TRANSFER_MATCH_MASK)
       {
@@ -515,7 +949,7 @@ static int dap_swd_transfer(uint8_t *req, uint8_t *resp)
       }
       else
       {
-        ack = dap_swd_transfer_word(request, &data);
+        ack = dap_transfer_word(request, &data);
 
         if (ack != DAP_TRANSFER_OK)
           break;
@@ -523,104 +957,76 @@ static int dap_swd_transfer(uint8_t *req, uint8_t *resp)
         verify_write = true;
       }
     }
-
-    req_count--;
-    resp_count++;
   }
 
   if (DAP_TRANSFER_OK == ack)
   {
     if (posted_read)
     {
-      ack = dap_swd_transfer_word(SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW, &data);
-
-      // Save the data regardless of the ACK status, at this point it does not matter
-      if (resp_size <= (DAP_CONFIG_PACKET_SIZE-4))
-      {
-        resp_data[0] = data;
-        resp_data[1] = data >> 8;
-        resp_data[2] = data >> 16;
-        resp_data[3] = data >> 24;
-      }
+      ack = dap_transfer_word(SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW, &data);
+      dap_resp_add_word(data);
     }
     else if (verify_write)
     {
-      ack = dap_swd_transfer_word(SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW, NULL);
+      ack = dap_transfer_word(SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW, NULL);
     }
   }
 
-  resp[0] = resp_count;
-  resp[1] = ack;
-
-  return resp_size;
+  dap_resp_set_byte(1, resp_count);
+  dap_resp_set_byte(2, ack);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_swd_transfer_block(uint8_t *req, uint8_t *resp)
+static void dap_transfer_block(void)
 {
-  int req_count, req_size, resp_count, resp_size, request, ack;
-  uint8_t *req_data, *resp_data;
+  int req_count, resp_count, request, ack;
   uint32_t data;
 
-  req_count = ((int)req[2] << 8) | req[1];
-  request = req[3];
-  req_data = &req[4];
-  req_size = 4;
+  dap_resp_add_byte(0); // Count
+  dap_resp_add_byte(0); // Count
+  dap_resp_add_byte(DAP_TRANSFER_INVALID);
 
-  ack = DAP_TRANSFER_INVALID;
+  if (!dap_select_device(dap_req_get_byte()))
+    return;
+
+  req_count  = dap_req_get_half();
   resp_count = 0;
-  resp_data = &resp[3];
-  resp_size = 3;
-
-  resp[0] = 0;
-  resp[1] = 0;
-  resp[2] = DAP_TRANSFER_INVALID;
 
   if (0 == req_count)
-    return resp_size;
+    return;
+
+  request = dap_req_get_byte();
+  ack = DAP_TRANSFER_INVALID;
 
   if (request & DAP_TRANSFER_RnW)
   {
-    int transfers = (request & DAP_TRANSFER_APnDP) ? (req_count + 1) : req_count;
+    bool needs_posted = dap_needs_posted_read(request);
+    int transfers = needs_posted ? (req_count + 1) : req_count;
 
     for (int i = 0; i < transfers; i++)
     {
-      if (i == req_count) // This will only happen for AP transfers
+      if (i == req_count)
         request = SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW;
 
-      ack = dap_swd_transfer_word(request, &data);
+      ack = dap_transfer_word(request, &data);
 
       if (DAP_TRANSFER_OK != ack)
         break;
 
-      if ((0 == i) && (request & DAP_TRANSFER_APnDP))
+      if (needs_posted && i == 0)
         continue;
 
-      if (resp_size > (DAP_CONFIG_PACKET_SIZE-4))
-        break;
-
-      resp_data[0] = data;
-      resp_data[1] = data >> 8;
-      resp_data[2] = data >> 16;
-      resp_data[3] = data >> 24;
-      resp_data += 4;
-      resp_size += 4;
+      dap_resp_add_word(data);
       resp_count++;
     }
   }
-  else
+  else // Write
   {
     for (int i = 0; i < req_count; i++)
     {
-      if (req_size > (DAP_CONFIG_PACKET_SIZE-4))
-        break;
+      data = dap_req_get_word();
 
-      data = ((uint32_t)req_data[3] << 24) | ((uint32_t)req_data[2] << 16) |
-             ((uint32_t)req_data[1] << 8) | ((uint32_t)req_data[0] << 0);
-      req_data += 4;
-      req_size += 4;
-
-      ack = dap_swd_transfer_word(request, &data);
+      ack = dap_transfer_word(request, &data);
 
       if (DAP_TRANSFER_OK != ack)
         break;
@@ -629,242 +1035,80 @@ static int dap_swd_transfer_block(uint8_t *req, uint8_t *resp)
     }
 
     if (DAP_TRANSFER_OK == ack)
-      ack = dap_swd_transfer_word(SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW, NULL);
+      ack = dap_transfer_word(SWD_DP_R_RDBUFF | DAP_TRANSFER_RnW, NULL);
   }
 
-  resp[0] = resp_count;
-  resp[1] = resp_count >> 8;
-  resp[2] = ack;
-
-  return resp_size;
+  dap_resp_set_byte(1, resp_count);
+  dap_resp_set_byte(2, resp_count >> 8);
+  dap_resp_set_byte(3, ack);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_info(uint8_t *req, uint8_t *resp)
-{
-  int index = req[0];
-
-  if (DAP_INFO_VENDOR <= index && index <= DAP_INFO_DEVICE_NAME)
-  {
-    if (dap_info_strings[index])
-    {
-      resp[0] = strlen(dap_info_strings[index]) + 1;
-      strcpy((char *)&resp[1], dap_info_strings[index]);
-    }
-    else
-    {
-      resp[0] = 0;
-    }
-  }
-  else if (DAP_INFO_CAPABILITIES == index)
-  {
-    resp[0] = 1;
-    resp[1] = 0;
-
-#ifdef DAP_CONFIG_ENABLE_SWD
-    resp[1] |= DAP_PORT_SWD;
-#endif
-#ifdef DAP_CONFIG_ENABLE_JTAG
-    resp[1] |= DAP_PORT_JTAG;
-#endif
-  }
-  else if (DAP_INFO_PACKET_COUNT == index)
-  {
-    resp[0] = 1;
-    resp[1] = DAP_CONFIG_PACKET_COUNT;
-  }
-  else if (DAP_INFO_PACKET_SIZE == index)
-  {
-    resp[0] = 2;
-    resp[1] = DAP_CONFIG_PACKET_SIZE & 0xff;
-    resp[2] = (DAP_CONFIG_PACKET_SIZE >> 8) & 0xff;
-  }
-
-  return resp[0] + 1;
-}
-
-//-----------------------------------------------------------------------------
-static int dap_led(uint8_t *req, uint8_t *resp)
-{
-  int index = req[0];
-  int state = req[1];
-
-  DAP_CONFIG_LED(index, state);
-
-  resp[0] = DAP_OK;
-
-  return 1;
-}
-
-//-----------------------------------------------------------------------------
-static int dap_connect(uint8_t *req, uint8_t *resp)
-{
-  int port = req[0];
-
-  if (DAP_PORT_AUTODETECT == port)
-    port = DAP_CONFIG_DEFAULT_PORT;
-
-  dap_port = DAP_PORT_DISABLED;
-
-#ifdef DAP_CONFIG_ENABLE_SWD
-  if (DAP_PORT_SWD == port)
-  {
-    DAP_CONFIG_CONNECT_SWD();
-    dap_port = DAP_PORT_SWD;
-  }
-#endif
-
-#ifdef DAP_CONFIG_ENABLE_JTAG
-  if (DAP_PORT_JTAG == port)
-  {
-    DAP_CONFIG_CONNECT_JTAG();
-    dap_port = DAP_PORT_JTAG;
-  }
-#endif
-
-  resp[0] = dap_port;
-
-  return 1;
-}
-
-//-----------------------------------------------------------------------------
-static int dap_disconnect(uint8_t *req, uint8_t *resp)
-{
-  DAP_CONFIG_DISCONNECT();
-
-  dap_port = DAP_PORT_DISABLED;
-
-  resp[0] = DAP_OK;
-
-  (void)req;
-  return 1;
-}
-
-//-----------------------------------------------------------------------------
-static int dap_transfer_configure(uint8_t *req, uint8_t *resp)
-{
-  dap_idle_cycles = req[0];
-  dap_retry_count = ((int)req[2] << 8) | req[1];
-  dap_match_retry_count = ((int)req[4] << 8) | req[3];
-
-  resp[0] = DAP_OK;
-
-  return 1;
-}
-
-//-----------------------------------------------------------------------------
-static int dap_transfer(uint8_t *req, uint8_t *resp)
-{
-  resp[0] = 0;
-  resp[1] = DAP_TRANSFER_INVALID;
-
-#ifdef DAP_CONFIG_ENABLE_SWD
-  if (DAP_PORT_SWD == dap_port)
-    return dap_swd_transfer(req, resp);
-#endif
-
-#ifdef DAP_CONFIG_ENABLE_JTAG
-  if (DAP_PORT_JTAG == dap_port)
-    return dap_jtag_transfer(req, resp);
-#endif
-
-  return 2;
-}
-
-//-----------------------------------------------------------------------------
-static int dap_transfer_block(uint8_t *req, uint8_t *resp)
-{
-  resp[0] = 0;
-  resp[1] = 0;
-  resp[2] = DAP_TRANSFER_INVALID;
-
-#ifdef DAP_CONFIG_ENABLE_SWD
-  if (DAP_PORT_SWD == dap_port)
-    return dap_swd_transfer_block(req, resp);
-#endif
-
-#ifdef DAP_CONFIG_ENABLE_JTAG
-  if (DAP_PORT_JTAG == dap_port)
-    return dap_jtag_transfer_block(req, resp);
-#endif
-
-  return 3;
-}
-
-//-----------------------------------------------------------------------------
-static int dap_transfer_abort(uint8_t *req, uint8_t *resp)
+static void dap_transfer_abort(void)
 {
   // This request is handled outside of the normal queue.
   // We should never get here.
-  resp[0] = DAP_OK;
-  (void)req;
-  return 1;
+  dap_resp_add_byte(DAP_OK);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_write_abort(uint8_t *req, uint8_t *resp)
+static void dap_write_abort(void)
 {
-#ifdef DAP_CONFIG_ENABLE_SWD
+  int status = DAP_ERROR;
+  uint32_t data;
+
+  if (!dap_select_device(dap_req_get_byte()))
+  {
+    dap_resp_add_byte(DAP_ERROR);
+    return;
+  }
+
+  data = dap_req_get_word();
+
   if (DAP_PORT_SWD == dap_port)
   {
-    uint32_t data;
-
-    data = ((uint32_t)req[4] << 24) | ((uint32_t)req[3] << 16) |
-           ((uint32_t)req[2] << 8) | ((uint32_t)req[1] << 0);
-
-    dap_swd_transfer_word(SWD_DP_W_ABORT, &data);
-
-    resp[0] = DAP_OK;
+    dap_swd_operation(SWD_DP_W_ABORT, &data);
+    status = DAP_OK;
   }
-#endif
 
 #ifdef DAP_CONFIG_ENABLE_JTAG
-  if (DAP_PORT_JTAG == dap_port)
+  else if (DAP_PORT_JTAG == dap_port)
   {
-    // TODO: implement
-    resp[0] = DAP_OK;
+    dap_jtag_operation(DAP_TRANSFER_JTAG_ABORT, &data);
+    status = DAP_OK;
   }
 #endif
 
-  return 1;
+  dap_resp_add_byte(status);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_delay(uint8_t *req, uint8_t *resp)
+static void dap_delay(void)
 {
-  int delay;
-
-  delay = ((int)req[1] << 8) | req[0];
-
+  int delay = dap_req_get_half();
   dap_delay_us(delay);
-
-  resp[0] = DAP_OK;
-
-  return 1;
+  dap_resp_add_byte(DAP_OK);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_reset_target(uint8_t *req, uint8_t *resp)
+static void dap_reset_target(void)
 {
-  resp[0] = DAP_OK;
+  dap_resp_add_byte(DAP_OK);
 
 #ifdef DAP_CONFIG_RESET_TARGET_FN
-  resp[1] = 1;
   DAP_CONFIG_RESET_TARGET_FN();
+  dap_resp_add_byte(1);
+#else
+  dap_resp_add_byte(0);
 #endif
-
-  (void)req;
-  return 2;
 }
 
 //-----------------------------------------------------------------------------
-static int dap_swj_pins(uint8_t *req, uint8_t *resp)
+static void dap_swj_pins(void)
 {
-  int value = req[0];
-  int select = req[1];
-  int wait;
-
-  wait = ((int)req[5] << 24) | ((int)req[4] << 16) | ((int)req[3] << 8) | req[2];
+  int value  = dap_req_get_byte();
+  int select = dap_req_get_byte();
+  int wait   = dap_req_get_word();
 
   if (select & DAP_SWJ_SWCLK_TCK)
     DAP_CONFIG_SWCLK_TCK_write(value & DAP_SWJ_SWCLK_TCK);
@@ -891,117 +1135,221 @@ static int dap_swj_pins(uint8_t *req, uint8_t *resp)
     (DAP_CONFIG_nTRST_read()     ? DAP_SWJ_nTRST     : 0) |
     (DAP_CONFIG_nRESET_read()    ? DAP_SWJ_nRESET    : 0);
 
-  resp[0] = value;
-
-  return 1;
+  dap_resp_add_byte(value);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_swj_clock(uint8_t *req, uint8_t *resp)
+static void dap_swj_clock(void)
 {
-  uint32_t freq;
-
-  freq = ((uint32_t)req[3] << 24) | ((uint32_t)req[2] << 16) |
-         ((uint32_t)req[1] << 8) | req[0];
-
+  int freq = dap_req_get_word();
   dap_setup_clock(freq);
-
-  resp[0] = DAP_OK;
-
-  return 1;
+  dap_resp_add_byte(DAP_OK);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_swj_sequence(uint8_t *req, uint8_t *resp)
+static void dap_swj_sequence(void)
 {
-  int size = req[0];
-  uint8_t *data = &req[1];
-  int offset = 0;
+  int size = dap_req_get_byte();
 
   while (size)
   {
     int sz = (size > 8) ? 8 : size;
-
-    dap_swd_write(data[offset], sz);
-
+    dap_swd_write(dap_req_get_byte(), sz);
     size -= sz;
-    offset++;
   }
 
-  resp[0] = DAP_OK;
-
-  return 1;
+  dap_resp_add_byte(DAP_OK);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_swd_configure(uint8_t *req, uint8_t *resp)
+static void dap_swd_configure(void)
 {
-#ifdef DAP_CONFIG_ENABLE_SWD
-  uint8_t data = req[0];
+  int data = dap_req_get_byte();
 
-  dap_swd_turnaround  = (data & 3) + 1;
-  dap_swd_data_phase  = (data & 4) ? 1 : 0;
+  dap_swd_turnaround = (data & 3) + 1;
+  dap_swd_data_phase = (data & 4) ? 1 : 0;
 
-  resp[0] = DAP_OK;
-#endif
-
-  (void)req;
-  (void)resp;
-  return 1;
+  dap_resp_add_byte(DAP_OK);
 }
 
 //-----------------------------------------------------------------------------
-static int dap_jtag_sequence(uint8_t *req, uint8_t *resp)
+static void dap_swd_sequence(void)
+{
+  int req_count;
+
+  if (DAP_PORT_SWD != dap_port)
+  {
+    dap_resp_add_byte(DAP_ERROR);
+    return;
+  }
+
+  dap_resp_add_byte(DAP_OK);
+
+  req_count = dap_req_get_byte();
+
+  for (int i = 0; i < req_count; i++)
+  {
+    int info  = dap_req_get_byte();
+    int count = info & SWD_SEQUENCE_COUNT;
+    int din   = info & SWD_SEQUENCE_DIN;
+
+    if (count == 0)
+      count = 64U;
+
+    if (din)
+    {
+      DAP_CONFIG_SWDIO_TMS_in();
+
+      while (count)
+      {
+        int sz = (count > 8) ? 8 : count;
+        int value = dap_swd_read(sz);
+        dap_resp_add_byte(value);
+        count -= sz;
+      }
+    }
+    else
+    {
+      DAP_CONFIG_SWDIO_TMS_out();
+
+      while (count)
+      {
+        int sz = (count > 8) ? 8 : count;
+        dap_swd_write(dap_req_get_byte(), sz);
+        count -= sz;
+      }
+    }
+  }
+
+  DAP_CONFIG_SWDIO_TMS_out();
+}
+
+//-----------------------------------------------------------------------------
+static void dap_jtag_sequence(void)
 {
 #ifdef DAP_CONFIG_ENABLE_JTAG
-  // TODO: implement
-  resp[0] = DAP_OK;
-#endif
+  int req_count;
 
-  (void)req;
-  (void)resp;
-  return 1;
+  if (DAP_PORT_JTAG != dap_port)
+  {
+    dap_resp_add_byte(DAP_ERROR);
+    return;
+  }
+
+  dap_resp_add_byte(DAP_OK);
+
+  req_count = dap_req_get_byte();
+
+  for (int i = 0; i < req_count; i++)
+  {
+    int info  = dap_req_get_byte();
+    int count = info & JTAG_SEQUENCE_COUNT;
+    int tms   = info & JTAG_SEQUENCE_TMS;
+    int tdo   = info & JTAG_SEQUENCE_TDO;
+
+    if (count == 0)
+      count = 64;
+
+    DAP_CONFIG_SWDIO_TMS_write(tms);
+
+    while (count)
+    {
+      int sz = (count > 8) ? 8 : count;
+      int value = dap_jtag_rdwr(dap_req_get_byte(), sz);
+
+      if (tdo)
+        dap_resp_add_byte(value);
+
+      count -= sz;
+    }
+  }
+#else
+  dap_resp_add_byte(DAP_ERROR);
+#endif
 }
 
 //-----------------------------------------------------------------------------
-static int dap_jtag_configure(uint8_t *req, uint8_t *resp)
+static void dap_jtag_configure(void)
 {
 #ifdef DAP_CONFIG_ENABLE_JTAG
-  // TODO: implement
-  resp[0] = DAP_OK;
-#endif
+  int count = dap_req_get_byte();
+  int bits = 0;
 
-  (void)req;
-  (void)resp;
-  return 1;
+  if (count > DAP_CONFIG_JTAG_DEV_COUNT)
+  {
+    dap_resp_add_byte(DAP_ERROR);
+    return;
+  }
+
+  dap_jtag_dev_count = count;
+  dap_jtag_dev_index = 0;
+
+  for (int i = 0; i < dap_jtag_dev_count; i++)
+  {
+    dap_jtag_ir_length[i] = dap_req_get_byte();
+    dap_jtag_ir_before[i] = bits;
+    bits += dap_jtag_ir_length[i];
+  }
+
+  for (int i = 0; i < dap_jtag_dev_count; i++)
+  {
+    bits -= dap_jtag_ir_length[i];
+    dap_jtag_ir_after[i] = bits;
+  }
+
+  dap_resp_add_byte(DAP_OK);
+#else
+  dap_resp_add_byte(DAP_ERROR);
+#endif
 }
 
 //-----------------------------------------------------------------------------
-static int dap_jtag_idcode(uint8_t *req, uint8_t *resp)
+static void dap_jtag_idcode(void)
 {
 #ifdef DAP_CONFIG_ENABLE_JTAG
-  // TODO: implement
-  resp[0] = DAP_OK;
-#endif
+  uint32_t data;
 
-  (void)req;
-  (void)resp;
-  return 1;
+  if (DAP_PORT_JTAG != dap_port || !dap_select_device(dap_req_get_byte()))
+  {
+    dap_resp_add_byte(DAP_ERROR);
+    return;
+  }
+
+  dap_jtag_write_ir(JTAG_IDCODE);
+
+  DAP_CONFIG_SWDIO_TMS_write(1);
+  dap_swj_run(1); // -> Select-DR-Scan
+  DAP_CONFIG_SWDIO_TMS_write(0);
+  dap_swj_run(2 + dap_jtag_dev_index); // -> Shift-DR
+
+  data = dap_jtag_read(31);
+
+  DAP_CONFIG_SWDIO_TMS_write(1);
+  data |= (dap_jtag_read(1) << 31); // -> Exit1-DR
+
+  dap_swj_run(1); // -> Update-DR
+  DAP_CONFIG_SWDIO_TMS_write(0);
+  dap_swj_run(1); // -> Idle
+  DAP_CONFIG_TDI_write(1);
+
+  dap_resp_add_byte(DAP_OK);
+  dap_resp_add_word(data);
+#endif
 }
 
 //-----------------------------------------------------------------------------
 void dap_init(void)
 {
-  dap_port  = 0;
-  dap_abort = false;
-  dap_match_mask = 0;
-  dap_idle_cycles = 0;
-  dap_retry_count = 100;
+  dap_port              = DAP_PORT_DISABLED;
+  dap_abort             = false;
+  dap_match_mask        = 0;
+  dap_idle_cycles       = 0;
+  dap_retry_count       = 100;
   dap_match_retry_count = 100;
-
-#ifdef DAP_CONFIG_ENABLE_SWD
-  dap_swd_turnaround = 1;
-  dap_swd_data_phase = false;
+  dap_swd_turnaround    = 1;
+  dap_swd_data_phase    = false;
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  dap_jtag_dev_count = 0;
 #endif
 
   dap_setup_clock(DAP_CONFIG_DEFAULT_CLOCK);
@@ -1024,16 +1372,16 @@ bool dap_filter_request(uint8_t *req)
 }
 
 //-----------------------------------------------------------------------------
-int dap_process_request(uint8_t *req, uint8_t *resp)
+int dap_process_request(uint8_t *req, int req_size, uint8_t *resp, int resp_size)
 {
-  const struct
+  static const struct
   {
     int    cmd;
-    int    (*handler)(uint8_t *, uint8_t *);
+    void   (*handler)(void);
   } handlers[] =
   {
     { ID_DAP_INFO,			dap_info },
-    { ID_DAP_LED,			dap_led },
+    { ID_DAP_HOST_STATUS,		dap_host_status },
     { ID_DAP_CONNECT,			dap_connect },
     { ID_DAP_DISCONNECT,		dap_disconnect },
     { ID_DAP_TRANSFER_CONFIGURE,	dap_transfer_configure },
@@ -1047,32 +1395,47 @@ int dap_process_request(uint8_t *req, uint8_t *resp)
     { ID_DAP_SWJ_CLOCK,			dap_swj_clock },
     { ID_DAP_SWJ_SEQUENCE,		dap_swj_sequence },
     { ID_DAP_SWD_CONFIGURE,		dap_swd_configure },
+    { ID_DAP_SWD_SEQUENCE,		dap_swd_sequence },
     { ID_DAP_JTAG_SEQUENCE,		dap_jtag_sequence },
     { ID_DAP_JTAG_CONFIGURE,		dap_jtag_configure },
     { ID_DAP_JTAG_IDCODE,		dap_jtag_idcode },
     { -1, NULL },
   };
-  int cmd = req[0];
+  int cmd;
 
-  memset(resp, 0, DAP_CONFIG_PACKET_SIZE);
+  dap_buf_init(req, req_size, resp, resp_size);
 
   dap_abort = false;
 
-  resp[0] = cmd;
-  resp[1] = DAP_ERROR;
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  dap_jtag_ir = JTAG_INVALID;
+#endif
+
+  cmd = dap_req_get_byte();
+  dap_resp_add_byte(cmd);
 
   for (int i = 0; -1 != handlers[i].cmd; i++)
   {
     if (cmd == handlers[i].cmd)
-      return handlers[i].handler(&req[1], &resp[1]);
+    {
+      handlers[i].handler();
+      return dap_resp_ptr;
+    }
   }
 
   if (ID_DAP_VENDOR_0 <= cmd && cmd <= ID_DAP_VENDOR_31)
-    return 2;
+  {
+#ifdef DAP_CONFIG_VENDOR_FN
+    DAP_CONFIG_VENDOR_FN(cmd - ID_DAP_VENDOR_0);
+#else
+    dap_resp_add_byte(DAP_ERROR);
+#endif
+    return dap_resp_ptr;
+  }
 
-  resp[0] = ID_DAP_INVALID;
+  dap_resp_set_byte(0, ID_DAP_INVALID);
 
-  return 2;
+  return dap_resp_ptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -1082,21 +1445,16 @@ void dap_clock_test(int delay)
 
   if (delay)
   {
+    dap_clock_delay = delay;
+
     while (1)
-    {
-      DAP_CONFIG_SWCLK_TCK_clr();
-      dap_delay_loop(delay);
-      DAP_CONFIG_SWCLK_TCK_set();
-      dap_delay_loop(delay);
-    }
+      dap_swj_run_slow(1<<30);
   }
   else
   {
     while (1)
-    {
-      DAP_CONFIG_SWCLK_TCK_clr();
-      DAP_CONFIG_SWCLK_TCK_set();
-    }
+      dap_swj_run_fast(1<<30);
   }
 }
+
 

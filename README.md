@@ -2,8 +2,8 @@
 
 This is a free and open implementation of the CMSIS-DAP debugger firmware.
 
-Only SWD protocol is supported for now. If you have a real need for JTAG support,
-please contact me.
+Both SWD and JTAG protocols are supported. However JTAG was not well tested due to lack of
+good targets. If you have any issues with it - let me know and I'll try to help.
 
 ## Platform requirements
 
@@ -21,7 +21,7 @@ pretty obvious.
 To configure clock frequency you need to specify two parameters:
   * DAP_CONFIG_DELAY_CONSTANT - clock timing constant. This constant can be determined
     by calling dap_clock_test() with varying parameter value and measuring the frequency
-    on the SWCLK pin. Delay constant value is the value of the parameter at which 
+    on the SWCLK pin. Delay constant value is the value of the parameter at which
     output frequency equals to 1 kHz.
   * DAP_CONFIG_FAST_CLOCK - threshold for switching to fast clock routines. This value
     defines the frequency, at which more optimal pin manipulation functions are used.
@@ -55,5 +55,6 @@ Additionally configuration file must provide basic initialization and control fu
  * DAP_CONFIG_CONNECT_SWD()
  * DAP_CONFIG_CONNECT_JTAG()
  * DAP_CONFIG_LED()
+ * DAP_CONFIG_DELAY()
 
 

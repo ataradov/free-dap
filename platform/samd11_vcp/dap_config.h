@@ -34,7 +34,6 @@
 #include "hal_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
-#define DAP_CONFIG_ENABLE_SWD
 //#define DAP_CONFIG_ENABLE_JTAG
 
 #define DAP_CONFIG_DEFAULT_PORT        DAP_PORT_SWD
@@ -42,6 +41,8 @@
 
 #define DAP_CONFIG_PACKET_SIZE         64
 #define DAP_CONFIG_PACKET_COUNT        1
+
+#define DAP_CONFIG_JTAG_DEV_COUNT      8
 
 // Set the value to NULL if you want to disable a string
 // DAP_CONFIG_PRODUCT_STR must contain "CMSIS-DAP" to be compatible with the standard
@@ -53,12 +54,16 @@
 #define DAP_CONFIG_DEVICE_NAME_STR     NULL
 
 //#define DAP_CONFIG_RESET_TARGET_FN     target_specific_reset_function
+//#define DAP_CONFIG_VENDOR_FN           vendor_command_handler_function
+
+// Attribute to use for performance-critical functions
+#define DAP_CONFIG_PERFORMANCE_ATTR    __attribute__((section(".ramfunc")))
 
 // A value at which dap_clock_test() produces 1 kHz output on the SWCLK pin
 #define DAP_CONFIG_DELAY_CONSTANT      3400
 
 // A threshold for switching to fast clock (no added delays)
-// This is the frequency produced by dap_clock_test(1) on the SWCLK pin 
+// This is the frequency produced by dap_clock_test(1) on the SWCLK pin
 #define DAP_CONFIG_FAST_CLOCK          2200000 // Hz
 
 /*- Prototypes --------------------------------------------------------------*/
@@ -205,6 +210,17 @@ static inline void DAP_CONFIG_LED(int index, int state)
 {
   (void)index;
   (void)state;
+}
+
+//-----------------------------------------------------------------------------
+__attribute__((always_inline))
+static inline void DAP_CONFIG_DELAY(uint32_t cycles)
+{
+  asm volatile (
+    "1: sub %[cycles], %[cycles], #1 \n"
+    "   bne 1b \n"
+    : [cycles] "+l"(cycles)
+  );
 }
 
 #endif // _DAP_CONFIG_H_
