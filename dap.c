@@ -743,6 +743,12 @@ void dap_resp_set_byte(int index, uint8_t value)
 }
 
 //-----------------------------------------------------------------------------
+bool dap_is_buf_error(void)
+{
+  return dap_buf_error;
+}
+
+//-----------------------------------------------------------------------------
 static void dap_info(void)
 {
   int index = dap_req_get_byte();
