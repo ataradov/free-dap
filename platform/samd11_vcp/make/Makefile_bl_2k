@@ -3,7 +3,7 @@ BUILD = build
 BIN = free_dap_d11_vcp_bl_2k
 
 ##############################################################################
-.PHONY: all directory clean size
+.PHONY: all directory clean size dfu
 
 CC = arm-none-eabi-gcc
 OBJCOPY = arm-none-eabi-objcopy
