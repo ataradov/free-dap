@@ -1,6 +1,6 @@
 ##############################################################################
 BUILD = build
-BIN = free_dap_d11_bl
+BIN = free_dap_d11_bl_4k
 
 ##############################################################################
 .PHONY: all directory clean size
@@ -25,7 +25,7 @@ CFLAGS += -flto
 
 LDFLAGS += -mcpu=cortex-m0plus -mthumb
 LDFLAGS += -Wl,--gc-sections
-LDFLAGS += -Wl,--script=../linker/samd11d14_bl.ld
+LDFLAGS += -Wl,--script=../linker/samd11d14_bl_4k.ld
 LDFLAGS += -flto
 
 INCLUDES += \
