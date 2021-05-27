@@ -34,8 +34,6 @@
 #include "hal_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
-//#define DAP_CONFIG_ENABLE_JTAG
-
 #define DAP_CONFIG_DEFAULT_PORT        DAP_PORT_SWD
 #define DAP_CONFIG_DEFAULT_CLOCK       1000000 // Hz
 
@@ -84,9 +82,23 @@ static inline void DAP_CONFIG_SWDIO_TMS_write(int value)
 }
 
 //-----------------------------------------------------------------------------
+static inline void DAP_CONFIG_TDI_write(int value)
+{
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  HAL_GPIO_TDI_write(value);
+#else
+  (void)value;
+#endif
+}
+
+//-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_TDO_write(int value)
 {
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  HAL_GPIO_TDO_write(value);
+#else
   (void)value;
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -114,15 +126,23 @@ static inline int DAP_CONFIG_SWDIO_TMS_read(void)
 }
 
 //-----------------------------------------------------------------------------
-static inline int DAP_CONFIG_TDI_read(void)
+static inline int DAP_CONFIG_TDO_read(void)
 {
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  return HAL_GPIO_TDO_read();
+#else
   return 0;
+#endif
 }
 
 //-----------------------------------------------------------------------------
-static inline int DAP_CONFIG_TDO_read(void)
+static inline int DAP_CONFIG_TDI_read(void)
 {
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  return HAL_GPIO_TDI_read();
+#else
   return 0;
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -167,8 +187,10 @@ static inline void DAP_CONFIG_SETUP(void)
   HAL_GPIO_SWCLK_TCK_in();
   HAL_GPIO_SWDIO_TMS_in();
   HAL_GPIO_nRESET_in();
-
-  HAL_GPIO_SWDIO_TMS_pullup();
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  HAL_GPIO_TDO_in();
+  HAL_GPIO_TDI_in();
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -177,6 +199,10 @@ static inline void DAP_CONFIG_DISCONNECT(void)
   HAL_GPIO_SWCLK_TCK_in();
   HAL_GPIO_SWDIO_TMS_in();
   HAL_GPIO_nRESET_in();
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  HAL_GPIO_TDO_in();
+  HAL_GPIO_TDI_in();
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -190,6 +216,11 @@ static inline void DAP_CONFIG_CONNECT_SWD(void)
 
   HAL_GPIO_nRESET_out();
   HAL_GPIO_nRESET_set();
+
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  HAL_GPIO_TDO_in();
+  HAL_GPIO_TDI_in();
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -203,6 +234,13 @@ static inline void DAP_CONFIG_CONNECT_JTAG(void)
 
   HAL_GPIO_nRESET_out();
   HAL_GPIO_nRESET_set();
+
+#ifdef DAP_CONFIG_ENABLE_JTAG
+  HAL_GPIO_TDO_in();
+
+  HAL_GPIO_TDI_out();
+  HAL_GPIO_TDI_set();
+#endif
 }
 
 //-----------------------------------------------------------------------------
