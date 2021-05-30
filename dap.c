@@ -1261,10 +1261,16 @@ static void dap_jtag_sequence(void)
     while (count)
     {
       int sz = (count > 8) ? 8 : count;
-      int value = dap_jtag_rdwr(dap_req_get_byte(), sz);
 
       if (tdo)
+      {
+        int value = dap_jtag_rdwr(dap_req_get_byte(), sz);
         dap_resp_add_byte(value);
+      }
+      else
+      {
+        dap_jtag_write(dap_req_get_byte(), sz);
+      }
 
       count -= sz;
     }
