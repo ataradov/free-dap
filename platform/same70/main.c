@@ -270,6 +270,7 @@ int main(void)
   serial_number_init();
   usb_init();
   usb_hid_init();
+  dap_init();
 
   app_status_timer.interval = STATUS_TIMEOUT;
   app_status_timer.repeat = true;
