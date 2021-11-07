@@ -33,8 +33,8 @@
 #include "hal_gpio.h"
 
 /*- Definitions -------------------------------------------------------------*/
-#define HAL_BOARD_V1
-//#define HAL_BOARD_V3
+//#define HAL_BOARD_V1
+#define HAL_BOARD_V3
 
 #if defined(HAL_BOARD_V1)
   HAL_GPIO_PIN(SWCLK_TCK,          A, 14)
