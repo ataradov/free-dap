@@ -1123,7 +1123,7 @@ static void dap_swj_pins(void)
     DAP_CONFIG_SWDIO_TMS_write(value & DAP_SWJ_SWDIO_TMS);
 
   if (select & DAP_SWJ_TDI)
-    DAP_CONFIG_TDO_write(value & DAP_SWJ_TDI);
+    DAP_CONFIG_TDI_write(value & DAP_SWJ_TDI);
 
   if (select & DAP_SWJ_nTRST)
     DAP_CONFIG_nTRST_write(value & DAP_SWJ_nTRST);
