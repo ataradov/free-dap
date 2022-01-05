@@ -71,7 +71,7 @@ a BootROM MSC mode and copy that file to the drive.
 I will try to do my best to keep this binary in sync with the code updates, but
 it is a manual process, so I may forget. Let me know if you have any issues.
 
-The pins use are as follows:
+The pins used are as follows:
 
 | GPIO | Function |
 |:---:|:---|
