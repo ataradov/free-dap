@@ -14,8 +14,8 @@ HAL_GPIO_PIN(TDI,            0, 13, sio_13)
 HAL_GPIO_PIN(TDO,            0, 14, sio_14)
 HAL_GPIO_PIN(nRESET,         0, 15, sio_15)
 
-HAL_GPIO_PIN(VCP_STATUS,     0, 6, sio_6);
-HAL_GPIO_PIN(DAP_STATUS,     0, 7, sio_7);
+HAL_GPIO_PIN(VCP_STATUS,     0, 2, sio_2);
+HAL_GPIO_PIN(DAP_STATUS,     0, 25, sio_25);
 
 HAL_GPIO_PIN(UART_TX,        0, 0, uart0_tx)
 HAL_GPIO_PIN(UART_RX,        0, 1, uart0_rx)

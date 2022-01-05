@@ -57,4 +57,32 @@ Additionally configuration file must provide basic initialization and control fu
  * DAP_CONFIG_LED()
  * DAP_CONFIG_DELAY()
 
+## Binaries
+
+Generally there are no pre-built binaries due to effort required to maintain
+them and low potential benefit because of custom hardware requirement.
+
+For RP2040 and Raspberry Pi Pico board specifically there is a binary, since
+it is a standard and a widely available board that has a nonvolatile bootloader.
+
+The UF2 file is located [here](bin/free_dap_rp2040.uf2). Simply boot into
+a BootROM MSC mode and copy that file to the drive.
+
+I will try to do my best to keep this binary in sync with the code updates, but
+it is a manual process, so I may forget. Let me know if you have any issues.
+
+The pins use are as follows:
+
+| GPIO | Function |
+|:---:|:---|
+| 11 | SWCLK/TCK |
+| 12 | SWDIO/TMS |
+| 13 | TDI |
+| 14 | TDO |
+| 15 | nRESET |
+| 0 | VCP TX |
+| 1 | VCP RX |
+| 2 | VCP Status |
+| 25 (LED) | DAP Status |
+
 
