@@ -34,6 +34,8 @@
 #include "dap.h"
 
 /*- Definitions -------------------------------------------------------------*/
+#define ARRAY_SIZE(x)  ((int)(sizeof(x) / sizeof(0[x])))
+
 enum
 {
   ID_DAP_INFO               = 0x00,
@@ -83,15 +85,31 @@ enum
   DAP_INFO_VENDOR           = 0x01,
   DAP_INFO_PRODUCT          = 0x02,
   DAP_INFO_SER_NUM          = 0x03,
-  DAP_INFO_FW_VER           = 0x04, // DAP_INFO_CMSIS_DAP_VER
+  DAP_INFO_CMSIS_DAP_VER    = 0x04,
   DAP_INFO_DEVICE_VENDOR    = 0x05,
   DAP_INFO_DEVICE_NAME      = 0x06,
-  DAP_INFO_PRODUCT_FW_VER   = 0x07,
+  DAP_INFO_BOARD_VENDOR     = 0x07,
+  DAP_INFO_BOARD_NAME       = 0x08,
+  DAP_INFO_FW_VER           = 0x09,
   DAP_INFO_CAPABILITIES     = 0xf0,
-  DAP_INFO_TIMESTAMP_CLOCK  = 0xf1,
-  DAP_INFO_SWO_BUFFER_SIZE  = 0xfd,
+  DAP_INFO_TDT              = 0xf1,
+  DAP_INFO_UART_RX_SIZE     = 0xfb,
+  DAP_INFO_UART_TX_SIZE     = 0xfc,
+  DAP_INFO_SWO_BUF_SIZE     = 0xfd,
   DAP_INFO_PACKET_COUNT     = 0xfe,
   DAP_INFO_PACKET_SIZE      = 0xff,
+};
+
+enum
+{
+  DAP_CAP_SWD               = (1 << 0),
+  DAP_CAP_JTAG              = (1 << 1),
+  DAP_CAP_SWO_UART          = (1 << 2),
+  DAP_CAP_SWO_MANCHESTER    = (1 << 3),
+  DAP_CAP_ATOMIC_CMD        = (1 << 4),
+  DAP_CAP_TDT               = (1 << 5),
+  DAP_CAP_SWO_STREAMING     = (1 << 6),
+  DAP_CAP_UART_COM_PORT     = (1 << 7),
 };
 
 enum
@@ -172,14 +190,39 @@ enum
 #define ARM_JTAG_IR_LENGTH  4
 
 /*- Constants ---------------------------------------------------------------*/
-static const char * const dap_info_strings[] =
+static const struct
 {
-  [DAP_INFO_VENDOR]        = DAP_CONFIG_VENDOR_STR,
-  [DAP_INFO_PRODUCT]       = DAP_CONFIG_PRODUCT_STR,
-  [DAP_INFO_SER_NUM]       = DAP_CONFIG_SER_NUM_STR,
-  [DAP_INFO_FW_VER]        = DAP_CONFIG_FW_VER_STR,
-  [DAP_INFO_DEVICE_VENDOR] = DAP_CONFIG_DEVICE_VENDOR_STR,
-  [DAP_INFO_DEVICE_NAME]   = DAP_CONFIG_DEVICE_NAME_STR,
+  int    id;
+  char   * const str;
+} dap_info_strings[] =
+{
+#ifdef DAP_CONFIG_VENDOR_STR
+  { DAP_INFO_VENDOR,        DAP_CONFIG_VENDOR_STR },
+#endif
+#ifdef DAP_CONFIG_PRODUCT_STR
+  { DAP_INFO_PRODUCT,       DAP_CONFIG_PRODUCT_STR },
+#endif
+#ifdef DAP_CONFIG_SER_NUM_STR
+  { DAP_INFO_SER_NUM,       DAP_CONFIG_SER_NUM_STR },
+#endif
+#ifdef DAP_CONFIG_CMSIS_DAP_VER_STR
+  { DAP_INFO_CMSIS_DAP_VER, DAP_CONFIG_CMSIS_DAP_VER_STR },
+#endif
+#ifdef DAP_CONFIG_DEVICE_VENDOR_STR
+  { DAP_INFO_DEVICE_VENDOR, DAP_CONFIG_DEVICE_VENDOR_STR },
+#endif
+#ifdef DAP_CONFIG_DEVICE_NAME_STR
+  { DAP_INFO_DEVICE_NAME,   DAP_CONFIG_DEVICE_NAME_STR },
+#endif
+#ifdef DAP_CONFIG_BOARD_VENDOR_STR
+  { DAP_INFO_BOARD_VENDOR,  DAP_CONFIG_BOARD_VENDOR_STR },
+#endif
+#ifdef DAP_CONFIG_BOARD_NAME_STR
+  { DAP_INFO_BOARD_NAME,    DAP_CONFIG_BOARD_NAME_STR },
+#endif
+#ifdef DAP_CONFIG_FW_VER_STR
+  { DAP_INFO_FW_VER,        DAP_CONFIG_FW_VER_STR },
+#endif
 };
 
 /*- Variables ---------------------------------------------------------------*/
@@ -753,30 +796,11 @@ static void dap_info(void)
 {
   int index = dap_req_get_byte();
 
-  if (DAP_INFO_VENDOR <= index && index <= DAP_INFO_DEVICE_NAME)
+  if (DAP_INFO_CAPABILITIES == index)
   {
-    if (dap_info_strings[index])
-    {
-      const char *str = dap_info_strings[index];
-
-      dap_resp_add_byte(0); // Size placeholder
-
-      while (*str)
-        dap_resp_add_byte(*str++);
-      dap_resp_add_byte(0);
-
-      dap_resp_set_byte(1, dap_resp_ptr-1);
-    }
-    else
-    {
-      dap_resp_add_byte(0);
-    }
-  }
-  else if (DAP_INFO_CAPABILITIES == index)
-  {
-    int cap = DAP_PORT_SWD;
+    int cap = DAP_CAP_SWD;
 #ifdef DAP_CONFIG_ENABLE_JTAG
-    cap |= DAP_PORT_JTAG;
+    cap |= DAP_CAP_JTAG;
 #endif
     dap_resp_add_byte(1);
     dap_resp_add_byte(cap);
@@ -794,7 +818,23 @@ static void dap_info(void)
   }
   else
   {
-    dap_resp_add_byte(0);
+    dap_resp_add_byte(0); // Size placeholder
+
+    for (int i = 0; i < ARRAY_SIZE(dap_info_strings); i++)
+    {
+      if (dap_info_strings[i].id == index)
+      {
+        const char *str = dap_info_strings[i].str;
+
+        while (*str)
+          dap_resp_add_byte(*str++);
+        dap_resp_add_byte(0);
+
+        dap_resp_set_byte(1, dap_resp_ptr-1);
+
+        break;
+      }
+    }
   }
 }
 
@@ -1411,7 +1451,6 @@ int dap_process_request(uint8_t *req, int req_size, uint8_t *resp, int resp_size
     { ID_DAP_JTAG_SEQUENCE,		dap_jtag_sequence },
     { ID_DAP_JTAG_CONFIGURE,		dap_jtag_configure },
     { ID_DAP_JTAG_IDCODE,		dap_jtag_idcode },
-    { -1, NULL },
   };
   int cmd;
 
@@ -1426,7 +1465,7 @@ int dap_process_request(uint8_t *req, int req_size, uint8_t *resp, int resp_size
   cmd = dap_req_get_byte();
   dap_resp_add_byte(cmd);
 
-  for (int i = 0; -1 != handlers[i].cmd; i++)
+  for (int i = 0; i < ARRAY_SIZE(handlers); i++)
   {
     if (cmd == handlers[i].cmd)
     {
@@ -1468,5 +1507,3 @@ void dap_clock_test(int delay)
       dap_swj_run_fast(1<<30);
   }
 }
-
-

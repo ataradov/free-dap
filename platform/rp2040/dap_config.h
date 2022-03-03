@@ -19,14 +19,11 @@
 
 #define DAP_CONFIG_JTAG_DEV_COUNT      8
 
-// Set the value to NULL if you want to disable a string
 // DAP_CONFIG_PRODUCT_STR must contain "CMSIS-DAP" to be compatible with the standard
 #define DAP_CONFIG_VENDOR_STR          "Alex Taradov"
 #define DAP_CONFIG_PRODUCT_STR         "Generic CMSIS-DAP Adapter"
 #define DAP_CONFIG_SER_NUM_STR         usb_serial_number
-#define DAP_CONFIG_FW_VER_STR          "v1.0"
-#define DAP_CONFIG_DEVICE_VENDOR_STR   NULL
-#define DAP_CONFIG_DEVICE_NAME_STR     NULL
+#define DAP_CONFIG_CMSIS_DAP_VER_STR   "1.3.0"
 
 //#define DAP_CONFIG_RESET_TARGET_FN     target_specific_reset_function
 //#define DAP_CONFIG_VENDOR_FN           vendor_command_handler_function

@@ -1,30 +1,5 @@
-/*
- * Copyright (c) 2020, Alex Taradov <alex@taradov.com>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2020-2022, Alex Taradov <alex@taradov.com>. All rights reserved.
 
 #ifndef _DAP_CONFIG_H_
 #define _DAP_CONFIG_H_
@@ -48,14 +23,11 @@ HAL_GPIO_PIN(nRESET,       D, 22)
 
 #define DAP_CONFIG_JTAG_DEV_COUNT      8
 
-// Set the value to NULL if you want to disable a string
 // DAP_CONFIG_PRODUCT_STR must contain "CMSIS-DAP" to be compatible with the standard
 #define DAP_CONFIG_VENDOR_STR          "Alex Taradov"
 #define DAP_CONFIG_PRODUCT_STR         "Generic CMSIS-DAP Adapter"
 #define DAP_CONFIG_SER_NUM_STR         usb_serial_number
-#define DAP_CONFIG_FW_VER_STR          "v1.0"
-#define DAP_CONFIG_DEVICE_VENDOR_STR   NULL
-#define DAP_CONFIG_DEVICE_NAME_STR     NULL
+#define DAP_CONFIG_CMSIS_DAP_VER_STR   "1.3.0"
 
 //#define DAP_CONFIG_RESET_TARGET_FN     target_specific_reset_function
 //#define DAP_CONFIG_VENDOR_FN           vendor_command_handler_function
@@ -85,6 +57,12 @@ static inline void DAP_CONFIG_SWCLK_TCK_write(int value)
 static inline void DAP_CONFIG_SWDIO_TMS_write(int value)
 {
   HAL_GPIO_SWDIO_TMS_write(value);
+}
+
+//-----------------------------------------------------------------------------
+static inline void DAP_CONFIG_TDI_write(int value)
+{
+  (void)value;
 }
 
 //-----------------------------------------------------------------------------
