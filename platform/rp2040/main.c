@@ -25,8 +25,10 @@
 #define F_TICK         1000000
 
 /*- Variables ---------------------------------------------------------------*/
-static uint8_t app_request_buffer[DAP_CONFIG_PACKET_SIZE];
-static uint8_t app_response_buffer[DAP_CONFIG_PACKET_SIZE];
+static uint8_t app_req_buf_hid[DAP_CONFIG_PACKET_SIZE];
+static uint8_t app_resp_buf_hid[DAP_CONFIG_PACKET_SIZE];
+static uint8_t app_req_buf_bulk[DAP_CONFIG_PACKET_SIZE];
+static uint8_t app_resp_buf_bulk[DAP_CONFIG_PACKET_SIZE];
 static uint8_t app_recv_buffer[USB_BUFFER_SIZE];
 static uint8_t app_send_buffer[USB_BUFFER_SIZE];
 static int app_recv_buffer_size = 0;
@@ -124,7 +126,7 @@ static void serial_number_init(void)
 //-----------------------------------------------------------------------------
 static void sys_time_init(void)
 {
-  SysTick->VAL = 0;
+  SysTick->VAL  = 0;
   SysTick->LOAD = 1000; // 1 ms
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   app_system_time = 0;
@@ -222,6 +224,7 @@ static void uart_timer_task(void)
 //-----------------------------------------------------------------------------
 void usb_cdc_line_coding_updated(usb_cdc_line_coding_t *line_coding)
 {
+  (void)line_coding;
   uart_init(line_coding);
 }
 
@@ -277,35 +280,43 @@ void usb_cdc_recv_callback(int size)
 //-----------------------------------------------------------------------------
 void usb_hid_send_callback(void)
 {
-  usb_hid_recv(app_request_buffer, DAP_CONFIG_PACKET_SIZE);
+  usb_hid_recv(app_req_buf_hid, DAP_CONFIG_PACKET_SIZE);
 }
 
 //-----------------------------------------------------------------------------
 void usb_hid_recv_callback(int size)
 {
   app_dap_event = true;
-  dap_process_request(app_request_buffer, sizeof(app_request_buffer),
-      app_response_buffer, sizeof(app_response_buffer));
-  usb_hid_send(app_response_buffer, sizeof(app_response_buffer));
+  dap_process_request(app_req_buf_hid, sizeof(app_req_buf_hid),
+      app_resp_buf_hid, sizeof(app_resp_buf_hid));
+  usb_hid_send(app_resp_buf_hid, sizeof(app_resp_buf_hid));
   (void)size;
 }
 
 //-----------------------------------------------------------------------------
-bool usb_class_handle_request(usb_request_t *request)
+static void usb_bulk_send_callback(void)
 {
-  if (usb_cdc_handle_request(request))
-    return true;
-  else if (usb_hid_handle_request(request))
-    return true;
-  else
-    return false;
+  usb_recv(USB_BULK_EP_RECV, app_req_buf_bulk, sizeof(app_req_buf_bulk));
+}
+
+//-----------------------------------------------------------------------------
+static void usb_bulk_recv_callback(int size)
+{
+  app_dap_event = true;
+  size = dap_process_request(app_req_buf_bulk, size,
+      app_resp_buf_bulk, sizeof(app_resp_buf_bulk));
+  usb_send(USB_BULK_EP_SEND, app_resp_buf_bulk, size);
 }
 
 //-----------------------------------------------------------------------------
 void usb_configuration_callback(int config)
 {
+  usb_set_send_callback(USB_BULK_EP_SEND, usb_bulk_send_callback);
+  usb_set_recv_callback(USB_BULK_EP_RECV, usb_bulk_recv_callback);
+
   usb_cdc_recv(app_recv_buffer, sizeof(app_recv_buffer));
-  usb_hid_recv(app_request_buffer, sizeof(app_request_buffer));
+  usb_hid_recv(app_req_buf_hid, sizeof(app_req_buf_hid));
+  usb_recv(USB_BULK_EP_RECV, app_req_buf_bulk, sizeof(app_req_buf_bulk));
 
   app_send_buffer_free = true;
   app_send_buffer_ptr = 0;
@@ -367,5 +378,3 @@ int main(void)
 
   return 0;
 }
-
-

@@ -9,9 +9,6 @@
 #include <stdbool.h>
 #include "usb_descriptors.h"
 
-/*- Definitions -------------------------------------------------------------*/
-#define USB_EP_NUM     16
-
 /*- Prototypes --------------------------------------------------------------*/
 void usb_hw_init(void);
 void usb_attach(void);

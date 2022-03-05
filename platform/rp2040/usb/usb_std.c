@@ -2,16 +2,19 @@
 // Copyright (c) 2016-2022, Alex Taradov <alex@taradov.com>. All rights reserved.
 
 /*- Includes ----------------------------------------------------------------*/
-#include <stdbool.h>
-#include <stdalign.h>
-#include <string.h>
-#include "utils.h"
 #include "usb.h"
 #include "usb_std.h"
 #include "usb_descriptors.h"
 
+/*- Definitions -------------------------------------------------------------*/
+#define USB_EP_NUM     16
+
 /*- Types -------------------------------------------------------------------*/
-typedef void (*usb_ep_callback_t)(int size);
+typedef struct
+{
+  void (*send)(void);
+  void (*recv)(int size);
+} usb_ep_callback_t;
 
 /*- Variables ---------------------------------------------------------------*/
 static usb_ep_callback_t usb_ep_callbacks[USB_EP_NUM];
@@ -22,30 +25,32 @@ static usb_ep_callback_t usb_ep_callbacks[USB_EP_NUM];
 void usb_init(void)
 {
   for (int i = 0; i < USB_EP_NUM; i++)
-    usb_ep_callbacks[i] = NULL;
+  {
+    usb_ep_callbacks[i].send = NULL;
+    usb_ep_callbacks[i].recv = NULL;
+  }
 
   usb_hw_init();
 }
 
 //-----------------------------------------------------------------------------
-void usb_set_callback(int ep, void (*callback)(int size))
+void usb_set_send_callback(int ep, void (*callback)(void))
 {
-  usb_ep_callbacks[ep] = callback;
+  usb_ep_callbacks[ep].send = callback;
 }
 
 //-----------------------------------------------------------------------------
-WEAK bool usb_class_handle_request(usb_request_t *request)
+void usb_set_recv_callback(int ep, void (*callback)(int size))
 {
-  (void)request;
-  return false;
+  usb_ep_callbacks[ep].recv = callback;
 }
 
 //-----------------------------------------------------------------------------
 bool usb_handle_standard_request(usb_request_t *request)
 {
-  static int usb_config = 0;
+  static uint8_t usb_config = 0;
 
-  switch ((request->bRequest << 8) | request->bmRequestType)
+  switch (USB_CMD_VALUE(request))
   {
     case USB_CMD(IN, DEVICE, STANDARD, GET_DESCRIPTOR):
     {
@@ -55,22 +60,20 @@ bool usb_handle_standard_request(usb_request_t *request)
 
       if (USB_DEVICE_DESCRIPTOR == type)
       {
-        length = LIMIT(length, usb_device_descriptor.bLength);
+        length = USB_LIMIT(length, usb_device_descriptor.bLength);
 
         usb_control_send((uint8_t *)&usb_device_descriptor, length);
       }
       else if (USB_CONFIGURATION_DESCRIPTOR == type)
       {
-        length = LIMIT(length, usb_configuration_hierarchy.configuration.wTotalLength);
-
+        length = USB_LIMIT(length, sizeof(usb_configuration_hierarchy_t));
         usb_control_send((uint8_t *)&usb_configuration_hierarchy, length);
       }
       else if (USB_STRING_DESCRIPTOR == type)
       {
         if (0 == index)
         {
-          length = LIMIT(length, usb_string_descriptor_zero.bLength);
-
+          length = USB_LIMIT(length, usb_string_descriptor_zero.bLength);
           usb_control_send((uint8_t *)&usb_string_descriptor_zero, length);
         }
         else if (index < USB_STR_COUNT)
@@ -89,7 +92,7 @@ bool usb_handle_standard_request(usb_request_t *request)
             buf[3 + i*2] = 0;
           }
 
-          length = LIMIT(length, size);
+          length = USB_LIMIT(length, size);
 
           usb_control_send(buf, length);
         }
@@ -98,6 +101,13 @@ bool usb_handle_standard_request(usb_request_t *request)
           return false;
         }
       }
+#ifdef USB_ENABLE_BOS
+      else if (USB_BINARY_OBJECT_STORE_DESCRIPTOR == type)
+      {
+        length = USB_LIMIT(length, sizeof(usb_bos_hierarchy_t));
+        usb_control_send((uint8_t *)&usb_bos_hierarchy, length);
+      }
+#endif
       else
       {
         return false;
@@ -136,8 +146,7 @@ bool usb_handle_standard_request(usb_request_t *request)
 
     case USB_CMD(IN, DEVICE, STANDARD, GET_CONFIGURATION):
     {
-      uint8_t config = usb_config;
-      usb_control_send(&config, sizeof(config));
+      usb_control_send(&usb_config, sizeof(uint8_t));
     } break;
 
     case USB_CMD(IN, DEVICE, STANDARD, GET_STATUS):
@@ -218,8 +227,13 @@ bool usb_handle_standard_request(usb_request_t *request)
 
     default:
     {
-      if (!usb_class_handle_request(request))
-        return false;
+      for (int i = 0; i < USB_ARRAY_SIZE(usb_class_handlers); i++)
+      {
+        if (usb_class_handlers[i](request))
+          return true;
+      }
+
+      return false;
     } break;
   }
 
@@ -229,14 +243,13 @@ bool usb_handle_standard_request(usb_request_t *request)
 //-----------------------------------------------------------------------------
 void usb_send_callback(int ep)
 {
-  if (usb_ep_callbacks[ep])
-    usb_ep_callbacks[ep](0);
+  if (usb_ep_callbacks[ep].send)
+    usb_ep_callbacks[ep].send();
 }
 
 //-----------------------------------------------------------------------------
 void usb_recv_callback(int ep, int size)
 {
-  if (usb_ep_callbacks[ep])
-    usb_ep_callbacks[ep](size);
+  if (usb_ep_callbacks[ep].recv)
+    usb_ep_callbacks[ep].recv(size);
 }
-

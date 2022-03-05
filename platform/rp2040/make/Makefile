@@ -3,7 +3,7 @@ BUILD = build
 BIN = free_dap_rp2040
 
 ##############################################################################
-.PHONY: all directory clean size
+.PHONY: all directory clean size release
 
 CC = arm-none-eabi-gcc
 OBJCOPY = arm-none-eabi-objcopy
@@ -30,16 +30,18 @@ LDFLAGS += -Wl,--script=../linker/rp2040.ld
 
 INCLUDES += \
   -I../include \
+  -I../usb \
   -I../../.. \
   -I..
 
 SRCS += \
   ../main.c \
   ../uart.c \
-  ../usb.c \
-  ../usb_std.c \
-  ../usb_cdc.c \
-  ../usb_hid.c \
+  ../usb/usb_rp2040.c \
+  ../usb/usb_std.c \
+  ../usb/usb_cdc.c \
+  ../usb/usb_hid.c \
+  ../usb/usb_winusb.c \
   ../usb_descriptors.c \
   ../startup_rp2040.c \
   ../../../dap.c \
@@ -50,7 +52,7 @@ CFLAGS += $(INCLUDES) $(DEFINES)
 
 OBJS = $(addprefix $(BUILD)/, $(notdir %/$(subst .c,.o, $(SRCS))))
 
-all: directory $(BUILD)/$(BIN).elf $(BUILD)/$(BIN).hex $(BUILD)/$(BIN).bin $(BUILD)/$(BIN).uf2 size
+all: directory $(BUILD)/$(BIN).elf $(BUILD)/$(BIN).hex $(BUILD)/$(BIN).bin $(BUILD)/$(BIN).uf2 release size
 
 $(BUILD)/$(BIN).elf: $(OBJS)
 	@echo LD $@
@@ -71,6 +73,10 @@ $(BUILD)/$(BIN).uf2: $(BUILD)/$(BIN).bin
 %.o:
 	@echo CC $@
 	@$(CC) $(CFLAGS) $(filter %/$(subst .o,.c,$(notdir $@)), $(SRCS)) -c -o $@
+
+release: $(BUILD)/$(BIN).uf2
+	@echo release
+	@cp $(BUILD)/$(BIN).uf2 ../../../bin/
 
 directory:
 	@$(MKDIR) -p $(BUILD)

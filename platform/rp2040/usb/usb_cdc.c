@@ -2,10 +2,6 @@
 // Copyright (c) 2017-2022, Alex Taradov <alex@taradov.com>. All rights reserved.
 
 /*- Includes ----------------------------------------------------------------*/
-#include <stdbool.h>
-#include <stdalign.h>
-#include <string.h>
-#include "utils.h"
 #include "usb.h"
 #include "usb_std.h"
 #include "usb_cdc.h"
@@ -17,9 +13,7 @@
 
 /*- Prototypes --------------------------------------------------------------*/
 static void usb_cdc_send_state_notify(void);
-static void usb_cdc_ep_comm_callback(int size);
-static void usb_cdc_ep_send_callback(int size);
-static void usb_cdc_ep_recv_callback(int size);
+static void usb_cdc_ep_comm_callback(void);
 
 /*- Variables ---------------------------------------------------------------*/
 static usb_cdc_line_coding_t usb_cdc_line_coding =
@@ -39,9 +33,9 @@ static bool usb_cdc_comm_busy;
 //-----------------------------------------------------------------------------
 void usb_cdc_init(void)
 {
-  usb_set_callback(USB_CDC_EP_COMM, usb_cdc_ep_comm_callback);
-  usb_set_callback(USB_CDC_EP_SEND, usb_cdc_ep_send_callback);
-  usb_set_callback(USB_CDC_EP_RECV, usb_cdc_ep_recv_callback);
+  usb_set_send_callback(USB_CDC_EP_COMM, usb_cdc_ep_comm_callback);
+  usb_set_send_callback(USB_CDC_EP_SEND, usb_cdc_send_callback);
+  usb_set_recv_callback(USB_CDC_EP_RECV, usb_cdc_recv_callback);
 
   usb_cdc_notify_message.request.bmRequestType = USB_IN_TRANSFER |
       USB_INTERFACE_RECIPIENT | USB_CLASS_REQUEST;
@@ -107,25 +101,11 @@ static void usb_cdc_send_state_notify(void)
 }
 
 //-----------------------------------------------------------------------------
-static void usb_cdc_ep_comm_callback(int size)
+static void usb_cdc_ep_comm_callback(void)
 {
   usb_cdc_comm_busy = false;
   usb_cdc_notify_message.value &= ~ONE_SHOT_STATES;
   usb_cdc_send_state_notify();
-  (void)size;
-}
-
-//-----------------------------------------------------------------------------
-static void usb_cdc_ep_send_callback(int size)
-{
-  usb_cdc_send_callback();
-  (void)size;
-}
-
-//-----------------------------------------------------------------------------
-static void usb_cdc_ep_recv_callback(int size)
-{
-  usb_cdc_recv_callback(size);
 }
 
 //-----------------------------------------------------------------------------
@@ -146,18 +126,18 @@ bool usb_cdc_handle_request(usb_request_t *request)
 {
   int length = request->wLength;
 
-  switch ((request->bRequest << 8) | request->bmRequestType)
+  switch (USB_CMD_VALUE(request))
   {
     case USB_CMD(OUT, INTERFACE, CLASS, CDC_SET_LINE_CODING):
     {
-      length = LIMIT(length, sizeof(usb_cdc_line_coding_t));
+      length = USB_LIMIT(length, sizeof(usb_cdc_line_coding_t));
 
       usb_control_recv(usb_cdc_set_line_coding_handler);
     } break;
 
     case USB_CMD(IN, INTERFACE, CLASS, CDC_GET_LINE_CODING):
     {
-      length = LIMIT(length, sizeof(usb_cdc_line_coding_t));
+      length = USB_LIMIT(length, sizeof(usb_cdc_line_coding_t));
 
       usb_control_send((uint8_t *)&usb_cdc_line_coding, length);
     } break;
@@ -182,17 +162,3 @@ bool usb_cdc_handle_request(usb_request_t *request)
 
   return true;
 }
-
-//-----------------------------------------------------------------------------
-WEAK void usb_cdc_control_line_state_update(int line_state)
-{
-  (void)line_state;
-}
-
-//-----------------------------------------------------------------------------
-WEAK void usb_cdc_send_break(int duration)
-{
-  (void)duration;
-}
-
-

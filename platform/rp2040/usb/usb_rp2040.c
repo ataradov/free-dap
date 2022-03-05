@@ -2,16 +2,13 @@
 // Copyright (c) 2022, Alex Taradov <alex@taradov.com>. All rights reserved.
 
 /*- Includes ----------------------------------------------------------------*/
-#include <string.h>
-#include <stdbool.h>
-#include <stdalign.h>
 #include "rp2040.h"
-#include "utils.h"
 #include "usb.h"
 #include "usb_std.h"
 #include "usb_descriptors.h"
 
 /*- Definitions -------------------------------------------------------------*/
+#define USB_EP_NUM             16
 #define USB_DPRAM_SIZE         4096
 #define USB_DPRAM              ((usb_dpram_t *)USBCTRL_DPRAM_BASE)
 #define USB_DPRAM_FIXED_SIZE   0x100
@@ -268,7 +265,7 @@ void usb_control_send(uint8_t *data, int size)
 {
   while (size)
   {
-    int transfer_size = LIMIT(size, usb_device_descriptor.bMaxPacketSize0);
+    int transfer_size = USB_LIMIT(size, usb_device_descriptor.bMaxPacketSize0);
 
     for (int i = 0; i < transfer_size; i++)
       usb_ep[0].in_buf[i] = data[i];
@@ -364,5 +361,3 @@ void usb_task(void)
     USBCTRL_REGS->BUFF_STATUS = status;
   }
 }
-
-

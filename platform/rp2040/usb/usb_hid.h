@@ -5,9 +5,6 @@
 #define _USB_HID_H_
 
 /*- Includes ----------------------------------------------------------------*/
-#include <stdint.h>
-#include <stdbool.h>
-#include "utils.h"
 #include "usb_std.h"
 
 /*- Definitions -------------------------------------------------------------*/
@@ -24,7 +21,7 @@ enum
 };
 
 /*- Types -------------------------------------------------------------------*/
-typedef struct PACK
+typedef struct USB_PACK
 {
   uint8_t   bLength;
   uint8_t   bDescriptorType;
@@ -45,4 +42,3 @@ void usb_hid_send_callback(void);
 void usb_hid_recv_callback(int size);
 
 #endif // _USB_HID_H_
-

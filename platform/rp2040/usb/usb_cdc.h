@@ -5,12 +5,11 @@
 #define _USB_CDC_H_
 
 /*- Includes ----------------------------------------------------------------*/
-#include <stdint.h>
-#include <stdbool.h>
-#include "utils.h"
 #include "usb_std.h"
 
 /*- Definitions -------------------------------------------------------------*/
+#define USB_CDC_BCD_VERSION    0x0110
+
 enum
 {
   USB_CDC_SEND_ENCAPSULATED_COMMAND = 0x00,
@@ -144,7 +143,7 @@ enum
 #define USB_CDC_BREAK_DURATION_INFINITE  0xffff
 
 /*- Types -------------------------------------------------------------------*/
-typedef struct PACK
+typedef struct USB_PACK
 {
   uint8_t   bFunctionalLength;
   uint8_t   bDescriptorType;
@@ -152,7 +151,7 @@ typedef struct PACK
   uint16_t  bcdCDC;
 } usb_cdc_header_functional_descriptor_t;
 
-typedef struct PACK
+typedef struct USB_PACK
 {
   uint8_t   bFunctionalLength;
   uint8_t   bDescriptorType;
@@ -160,7 +159,7 @@ typedef struct PACK
   uint8_t   bmCapabilities;
 } usb_cdc_abstract_control_managment_descriptor_t;
 
-typedef struct PACK
+typedef struct USB_PACK
 {
   uint8_t   bFunctionalLength;
   uint8_t   bDescriptorType;
@@ -169,7 +168,7 @@ typedef struct PACK
   uint8_t   bDataInterface;
 } usb_cdc_call_managment_functional_descriptor_t;
 
-typedef struct PACK
+typedef struct USB_PACK
 {
   uint8_t   bFunctionalLength;
   uint8_t   bDescriptorType;
@@ -178,7 +177,7 @@ typedef struct PACK
   uint8_t   bSlaveInterface0;
 } usb_cdc_union_functional_descriptor_t;
 
-typedef struct PACK
+typedef struct USB_PACK
 {
   uint32_t  dwDTERate;
   uint8_t   bCharFormat;
@@ -186,7 +185,7 @@ typedef struct PACK
   uint8_t   bDataBits;
 } usb_cdc_line_coding_t;
 
-typedef struct PACK
+typedef struct USB_PACK
 {
   usb_request_t request;
   uint16_t      value;

@@ -193,5 +193,3 @@ __attribute__((naked, used, noreturn, section(".boot.entry"))) void boot_entry(v
 
   __builtin_unreachable();
 }
-
-

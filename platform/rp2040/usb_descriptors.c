@@ -3,7 +3,6 @@
 
 /*- Includes ----------------------------------------------------------------*/
 #include <stdalign.h>
-#include "usb.h"
 #include "usb_descriptors.h"
 
 /*- Variables ---------------------------------------------------------------*/
@@ -11,14 +10,14 @@ const alignas(4) usb_device_descriptor_t usb_device_descriptor =
 {
   .bLength            = sizeof(usb_device_descriptor_t),
   .bDescriptorType    = USB_DEVICE_DESCRIPTOR,
-  .bcdUSB             = 0x0200,
+  .bcdUSB             = USB_BCD_VERSION,
   .bDeviceClass       = USB_DEVICE_CLASS_MISCELLANEOUS,
   .bDeviceSubClass    = USB_DEVICE_SUBCLASS_COMMON,
   .bDeviceProtocol    = USB_DEVICE_PROTOCOL_INTERFACE_ASSOCIATION,
   .bMaxPacketSize0    = USB_CTRL_EP_SIZE,
   .idVendor           = 0x6666,
-  .idProduct          = 0x6600,
-  .bcdDevice          = 0x0101,
+  .idProduct          = 0x9930,
+  .bcdDevice          = 0x0100,
   .iManufacturer      = USB_STR_MANUFACTURER,
   .iProduct           = USB_STR_PRODUCT,
   .iSerialNumber      = USB_STR_SERIAL_NUMBER,
@@ -32,24 +31,25 @@ const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
     .bLength             = sizeof(usb_configuration_descriptor_t),
     .bDescriptorType     = USB_CONFIGURATION_DESCRIPTOR,
     .wTotalLength        = sizeof(usb_configuration_hierarchy_t),
-    .bNumInterfaces      = 3,
+    .bNumInterfaces      = USB_INTF_COUNT,
     .bConfigurationValue = 1,
     .iConfiguration      = 0,
-    .bmAttributes        = 0x80,
-    .bMaxPower           = 250, // 500 mA
+    .bmAttributes        = USB_ATTRIBUTE_BUS_POWERED,
+    .bMaxPower           = USB_MAX_POWER(500),
   },
 
+  // CMSIS-DAP v1
   .hid_interface =
   {
     .bLength             = sizeof(usb_interface_descriptor_t),
     .bDescriptorType     = USB_INTERFACE_DESCRIPTOR,
-    .bInterfaceNumber    = 0,
+    .bInterfaceNumber    = USB_INTF_HID,
     .bAlternateSetting   = 0,
     .bNumEndpoints       = 2,
     .bInterfaceClass     = USB_HID_DEVICE_CLASS,
     .bInterfaceSubClass  = 0,
     .bInterfaceProtocol  = 0,
-    .iInterface          = USB_STR_CMSIS_DAP,
+    .iInterface          = USB_STR_CMSIS_DAP_V1,
   },
 
   .hid =
@@ -83,11 +83,46 @@ const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
     .bInterval           = 1,
   },
 
+  // CMSIS-DAP v2
+  .bulk_interface =
+  {
+    .bLength             = sizeof(usb_interface_descriptor_t),
+    .bDescriptorType     = USB_INTERFACE_DESCRIPTOR,
+    .bInterfaceNumber    = USB_INTF_BULK,
+    .bAlternateSetting   = 0,
+    .bNumEndpoints       = 2,
+    .bInterfaceClass     = USB_DEVICE_CLASS_VENDOR_SPECIFIC,
+    .bInterfaceSubClass  = 0,
+    .bInterfaceProtocol  = 0,
+    .iInterface          = USB_STR_CMSIS_DAP_V2,
+  },
+
+  .bulk_ep_out =
+  {
+    .bLength             = sizeof(usb_endpoint_descriptor_t),
+    .bDescriptorType     = USB_ENDPOINT_DESCRIPTOR,
+    .bEndpointAddress    = USB_OUT_ENDPOINT | USB_BULK_EP_RECV,
+    .bmAttributes        = USB_BULK_ENDPOINT,
+    .wMaxPacketSize      = 64,
+    .bInterval           = 0,
+  },
+
+  .bulk_ep_in =
+  {
+    .bLength             = sizeof(usb_endpoint_descriptor_t),
+    .bDescriptorType     = USB_ENDPOINT_DESCRIPTOR,
+    .bEndpointAddress    = USB_IN_ENDPOINT | USB_BULK_EP_SEND,
+    .bmAttributes        = USB_BULK_ENDPOINT,
+    .wMaxPacketSize      = 64,
+    .bInterval           = 0,
+  },
+
+  // VCP
   .iad =
   {
     .bLength             = sizeof(usb_interface_association_descriptor_t),
     .bDescriptorType     = USB_INTERFACE_ASSOCIATION_DESCRIPTOR,
-    .bFirstInterface     = 1,
+    .bFirstInterface     = USB_INTF_CDC_COMM,
     .bInterfaceCount     = 2,
     .bFunctionClass      = USB_CDC_COMM_CLASS,
     .bFunctionSubClass   = USB_CDC_ACM_SUBCLASS,
@@ -99,7 +134,7 @@ const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
   {
     .bLength             = sizeof(usb_interface_descriptor_t),
     .bDescriptorType     = USB_INTERFACE_DESCRIPTOR,
-    .bInterfaceNumber    = 1,
+    .bInterfaceNumber    = USB_INTF_CDC_COMM,
     .bAlternateSetting   = 0,
     .bNumEndpoints       = 1,
     .bInterfaceClass     = USB_CDC_COMM_CLASS,
@@ -113,7 +148,7 @@ const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
     .bFunctionalLength   = sizeof(usb_cdc_header_functional_descriptor_t),
     .bDescriptorType     = USB_CS_INTERFACE_DESCRIPTOR,
     .bDescriptorSubtype  = USB_CDC_HEADER_SUBTYPE,
-    .bcdCDC              = 0x0110,
+    .bcdCDC              = USB_CDC_BCD_VERSION,
   },
 
   .cdc_acm =
@@ -130,7 +165,7 @@ const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
     .bDescriptorType     = USB_CS_INTERFACE_DESCRIPTOR,
     .bDescriptorSubtype  = USB_CDC_CALL_MGMT_SUBTYPE,
     .bmCapabilities      = USB_CDC_CALL_MGMT_OVER_DCI,
-    .bDataInterface      = 2,
+    .bDataInterface      = USB_INTF_CDC_DATA,
   },
 
   .cdc_union =
@@ -138,8 +173,8 @@ const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
     .bFunctionalLength   = sizeof(usb_cdc_union_functional_descriptor_t),
     .bDescriptorType     = USB_CS_INTERFACE_DESCRIPTOR,
     .bDescriptorSubtype  = USB_CDC_UNION_SUBTYPE,
-    .bMasterInterface    = 1,
-    .bSlaveInterface0    = 2,
+    .bMasterInterface    = USB_INTF_CDC_COMM,
+    .bSlaveInterface0    = USB_INTF_CDC_DATA,
   },
 
   .ep_comm =
@@ -156,7 +191,7 @@ const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
   {
     .bLength             = sizeof(usb_interface_descriptor_t),
     .bDescriptorType     = USB_INTERFACE_DESCRIPTOR,
-    .bInterfaceNumber    = 2,
+    .bInterfaceNumber    = USB_INTF_CDC_DATA,
     .bAlternateSetting   = 0,
     .bNumEndpoints       = 2,
     .bInterfaceClass     = USB_CDC_DATA_CLASS,
@@ -186,6 +221,76 @@ const alignas(4) usb_configuration_hierarchy_t usb_configuration_hierarchy =
   },
 };
 
+const alignas(4) usb_bos_hierarchy_t usb_bos_hierarchy =
+{
+  .bos =
+  {
+    .bLength             = sizeof(usb_binary_object_store_descriptor_t),
+    .bDescriptorType     = USB_BINARY_OBJECT_STORE_DESCRIPTOR,
+    .wTotalLength        = sizeof(usb_bos_hierarchy_t),
+    .bNumDeviceCaps      = 1,
+  },
+
+  .winusb =
+  {
+    .bLength                = sizeof(usb_winusb_capability_descriptor_t),
+    .bDescriptorType        = USB_DEVICE_CAPABILITY_DESCRIPTOR,
+    .bDevCapabilityType     = USB_DEVICE_CAPABILITY_PLATFORM,
+    .bReserved              = 0,
+    .PlatformCapabilityUUID = USB_WINUSB_PLATFORM_CAPABILITY_ID,
+    .dwWindowsVersion       = USB_WINUSB_WINDOWS_VERSION,
+    .wMSOSDescriptorSetTotalLength = sizeof(usb_msos_descriptor_set_t),
+    .bMS_VendorCode         = USB_WINUSB_VENDOR_CODE,
+    .bAltEnumCode           = 0,
+  },
+};
+
+const alignas(4) usb_msos_descriptor_set_t usb_msos_descriptor_set =
+{
+  .header =
+  {
+    .wLength             = sizeof(usb_winusb_set_header_descriptor_t),
+    .wDescriptorType     = USB_WINUSB_SET_HEADER_DESCRIPTOR,
+    .dwWindowsVersion    = USB_WINUSB_WINDOWS_VERSION,
+    .wDescriptorSetTotalLength = sizeof(usb_msos_descriptor_set_t),
+  },
+
+  .subset =
+  {
+    .header = {
+      .wLength           = sizeof(usb_winusb_subset_header_function_t),
+      .wDescriptorType   = USB_WINUSB_SUBSET_HEADER_FUNCTION,
+      .bFirstInterface   = USB_INTF_BULK,
+      .bReserved         = 0,
+      .wSubsetLength     = sizeof(usb_msos_descriptor_subset_t),
+    },
+
+    .comp_id =
+    {
+      .wLength           = sizeof(usb_winusb_feature_compatble_id_t),
+      .wDescriptorType   = USB_WINUSB_FEATURE_COMPATBLE_ID,
+      .CompatibleID      = "WINUSB\0\0",
+      .SubCompatibleID   = { 0 },
+    },
+
+    .property =
+    {
+      .wLength             = sizeof(usb_winusb_feature_reg_property_guids_t),
+      .wDescriptorType     = USB_WINUSB_FEATURE_REG_PROPERTY,
+      .wPropertyDataType   = USB_WINUSB_PROPERTY_DATA_TYPE_MULTI_SZ,
+      .wPropertyNameLength = sizeof(usb_msos_descriptor_set.subset.property.PropertyName),
+      .PropertyName        = {
+          'D',0,'e',0,'v',0,'i',0,'c',0,'e',0,'I',0,'n',0,'t',0,'e',0,'r',0,'f',0,'a',0,'c',0,'e',0,
+          'G',0,'U',0,'I',0,'D',0,'s',0, 0, 0 },
+      .wPropertyDataLength = sizeof(usb_msos_descriptor_set.subset.property.PropertyData),
+      .PropertyData        = {
+          '{',0,'C',0,'D',0,'B',0,'3',0,'B',0,'5',0,'A',0,'D',0,'-',0,'2',0,'9',0,'3',0,'B',0,'-',0,
+          '4',0,'6',0,'6',0,'3',0,'-',0,'A',0,'A',0,'3',0,'6',0,'-',0,'1',0,'A',0,'A',0,'E',0,'4',0,
+          '6',0,'4',0,'6',0,'3',0,'7',0,'7',0,'6',0,'}',0, 0, 0, 0, 0 },
+    },
+  },
+};
+
 const alignas(4) uint8_t usb_hid_report_descriptor[28] =
 {
   0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
@@ -206,20 +311,26 @@ const alignas(4) uint8_t usb_hid_report_descriptor[28] =
 
 const alignas(4) usb_string_descriptor_zero_t usb_string_descriptor_zero =
 {
-  .bLength               = sizeof(usb_string_descriptor_zero_t),
-  .bDescriptorType       = USB_STRING_DESCRIPTOR,
-  .wLANGID               = 0x0409, // English (United States)
+  .bLength         = sizeof(usb_string_descriptor_zero_t),
+  .bDescriptorType = USB_STRING_DESCRIPTOR,
+  .wLANGID         = USB_LANGID_ENGLISH,
 };
-
-char usb_serial_number[16];
 
 const char *usb_strings[] =
 {
   [USB_STR_MANUFACTURER]  = "Alex Taradov",
   [USB_STR_PRODUCT]       = "Combined VCP and CMSIS-DAP Adapter",
   [USB_STR_COM_PORT]      = "Virtual COM-Port",
-  [USB_STR_CMSIS_DAP]     = "CMSIS-DAP Adapter",
+  [USB_STR_CMSIS_DAP_V1]  = "CMSIS-DAP v1 Adapter",
+  [USB_STR_CMSIS_DAP_V2]  = "CMSIS-DAP v2 Adapter",
   [USB_STR_SERIAL_NUMBER] = usb_serial_number,
 };
 
+const usb_class_handler_t usb_class_handlers[3] =
+{
+  usb_hid_handle_request,
+  usb_cdc_handle_request,
+  usb_winusb_handle_request,
+};
 
+char usb_serial_number[16];
