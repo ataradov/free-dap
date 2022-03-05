@@ -830,7 +830,7 @@ static void dap_info(void)
           dap_resp_add_byte(*str++);
         dap_resp_add_byte(0);
 
-        dap_resp_set_byte(1, dap_resp_ptr-1);
+        dap_resp_set_byte(1, dap_resp_ptr-2);
 
         break;
       }
