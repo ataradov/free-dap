@@ -48,6 +48,7 @@ typedef struct
 static int usb_ep_buf_ptr = 0;
 static usb_ep_t usb_ep[USB_EP_NUM];
 static void (*usb_control_recv_callback)(uint8_t *data, int size);
+static int usb_setup_length;
 
 /*- Prototypes --------------------------------------------------------------*/
 static void usb_reset_endpoints(void);
@@ -263,6 +264,9 @@ void usb_control_stall(void)
 //-----------------------------------------------------------------------------
 void usb_control_send(uint8_t *data, int size)
 {
+  bool need_zlp = (size < usb_setup_length) &&
+      ((size & (usb_device_descriptor.bMaxPacketSize0-1)) == 0);
+
   while (size)
   {
     int transfer_size = USB_LIMIT(size, usb_device_descriptor.bMaxPacketSize0);
@@ -278,6 +282,9 @@ void usb_control_send(uint8_t *data, int size)
     size -= transfer_size;
     data += transfer_size;
   }
+
+  if (need_zlp)
+    usb_control_send_zlp();
 
   usb_start_out_transfer(0, USB_CTRL_EP_SIZE);
 }
@@ -311,6 +318,8 @@ void usb_task(void)
   {
     usb_request_t *request = (usb_request_t *)USBCTRL_DPRAM;
 
+    usb_setup_length = request->wLength;
+
     usb_ep[0].in_pid  = 1;
     usb_ep[0].out_pid = 1;
 
@@ -318,6 +327,8 @@ void usb_task(void)
 
     if (!usb_handle_standard_request(request))
       usb_control_stall();
+
+    usb_setup_length = -1;
   }
 
   if (status & USBCTRL_REGS_INTS_BUFF_STATUS_Msk)

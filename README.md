@@ -8,10 +8,18 @@ good targets. If you have any issues with it - let me know and I'll try to help.
 ## Platform requirements
 
 To create a CMSIS-DAP compliant debugger, your platform must:
- * Implement USB HID device able to receive and send arbitrary reports
+ * Implement USB HID (and raw bulk for CMSIS-DAP v2) device able to receive and send arbitrary payloads
  * Provide configuration file dap_config.h with definitions for hardware-dependent calls
  * Call dap_init() at the initialization time
  * Call dap_process_request() for every received request and send the response back
+
+## CMSIS-DAP version support
+
+Free-DAP library itself is protocol agnostic and implementation of the specific version
+of the CMSIS-DAP protocol (v1 or v2) is up to the individual platforms.
+
+Currently RP2040 and SAM D11 implementaitons were updated to support CMSIS-DAP v2.
+Other platforms would be updated if requested or needed by me.
 
 ## Configuration
 
@@ -84,5 +92,3 @@ The pins used are as follows:
 | 1 | VCP RX |
 | 2 | VCP Status |
 | 25 (LED) | DAP Status |
-
-
