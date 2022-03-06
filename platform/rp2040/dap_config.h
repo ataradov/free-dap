@@ -23,7 +23,7 @@
 #define DAP_CONFIG_VENDOR_STR          "Alex Taradov"
 #define DAP_CONFIG_PRODUCT_STR         "Generic CMSIS-DAP Adapter"
 #define DAP_CONFIG_SER_NUM_STR         usb_serial_number
-#define DAP_CONFIG_CMSIS_DAP_VER_STR   "1.3.0"
+#define DAP_CONFIG_CMSIS_DAP_VER_STR   "2.0.0"
 
 //#define DAP_CONFIG_RESET_TARGET_FN     target_specific_reset_function
 //#define DAP_CONFIG_VENDOR_FN           vendor_command_handler_function

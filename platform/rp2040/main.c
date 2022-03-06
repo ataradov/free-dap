@@ -224,7 +224,6 @@ static void uart_timer_task(void)
 //-----------------------------------------------------------------------------
 void usb_cdc_line_coding_updated(usb_cdc_line_coding_t *line_coding)
 {
-  (void)line_coding;
   uart_init(line_coding);
 }
 
