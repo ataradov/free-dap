@@ -9,7 +9,11 @@
 #include "hal_gpio.h"
 
 /*- Definitions -------------------------------------------------------------*/
-#if !defined(HAL_BOARD_STD) && !defined(HAL_BOARD_VCP_V1) && !defined(HAL_BOARD_VCP_V3)
+#if !defined(HAL_BOARD_STD) && \
+    !defined(HAL_BOARD_VCP_V1) && \
+    !defined(HAL_BOARD_VCP_V3) && \
+    !defined(HAL_BOARD_CUSTOM)
+
   //#define HAL_BOARD_STD
   //#define HAL_BOARD_VCP_V1
   #define HAL_BOARD_VCP_V3
@@ -75,6 +79,10 @@
   #define UART_SERCOM_IRQ_HANDLER  irq_handler_sercom1
   #define UART_SERCOM_TXPO         1
   #define UART_SERCOM_RXPO         3
+
+#elif defined(HAL_BOARD_CUSTOM)
+  #include HAL_BOARD_CUSTOM
+
 #else
   #error No board defined
 #endif
