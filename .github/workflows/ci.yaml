@@ -1,0 +1,42 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  ci:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: sudo apt-get -y install gcc gcc-arm-none-eabi make
+
+    - name: rp2040
+      run: |
+        make --directory 'platform/rp2040/tools' -f 'Makefile' clean && \
+        make --directory 'platform/rp2040/tools' -f 'Makefile' && \
+        \
+        make --directory 'platform/rp2040/make' -f 'Makefile' clean && \
+        make --directory 'platform/rp2040/make' -f 'Makefile'
+
+    - name: samd11 (bl 2k)
+      run: |
+        make --directory 'platform/samd11/make' -f 'Makefile_bl_2k' clean && \
+        make --directory 'platform/samd11/make' -f 'Makefile_bl_2k'
+
+    - name: samd11 (no bl)
+      run: |
+        make --directory 'platform/samd11/make' -f 'Makefile_nobl' clean && \
+        make --directory 'platform/samd11/make' -f 'Makefile_nobl'
+
+    - name: samd21
+      run: |
+        make --directory 'platform/samd21/make' -f 'Makefile' clean && \
+        make --directory 'platform/samd21/make' -f 'Makefile'
+
+    - name: same70
+      run: |
+        make --directory 'platform/same70/make' -f 'Makefile' clean && \
+        make --directory 'platform/same70/make' -f 'Makefile'
+
