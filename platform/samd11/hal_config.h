@@ -9,9 +9,13 @@
 #include "hal_gpio.h"
 
 /*- Definitions -------------------------------------------------------------*/
-//#define HAL_BOARD_STD
-//#define HAL_BOARD_VCP_V1
-#define HAL_BOARD_VCP_V3
+#if defined(HAL_BOARD_CUSTOM)
+  #include HAL_BOARD_CUSTOM
+#else
+  //#define HAL_BOARD_STD
+  //#define HAL_BOARD_VCP_V1
+  #define HAL_BOARD_VCP_V3
+#endif
 
 #if defined(HAL_BOARD_STD)
   #define DAP_CONFIG_ENABLE_JTAG
