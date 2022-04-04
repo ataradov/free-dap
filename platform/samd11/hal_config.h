@@ -13,7 +13,11 @@
 //#define HAL_BOARD_VCP_V1
 #define HAL_BOARD_VCP_V3
 
-#if defined(HAL_BOARD_STD)
+#if defined(HAL_BOARD_CUSTOM)
+  // Externally supplied board configuration takes precedence
+  #include HAL_BOARD_CUSTOM
+
+#elif defined(HAL_BOARD_STD)
   #define DAP_CONFIG_ENABLE_JTAG
 
   HAL_GPIO_PIN(SWCLK_TCK,          A, 14)
