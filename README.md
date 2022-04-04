@@ -65,6 +65,11 @@ Additionally configuration file must provide basic initialization and control fu
  * DAP_CONFIG_LED()
  * DAP_CONFIG_DELAY()
 
+## Tools
+
+A complete RP2040 build requres bin2uf2 utility to generate UF2 file suitable for the RP2040 MSC bootloader.
+This utility can be downloded [here](https://github.com/ataradov/tools/tree/master/bin2uf2).
+
 ## Binaries
 
 Generally there are no pre-built binaries due to effort required to maintain
@@ -92,3 +97,4 @@ The pins used are as follows:
 | 1 | VCP RX |
 | 2 | VCP Status |
 | 25 (LED) | DAP Status |
+
