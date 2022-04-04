@@ -5,9 +5,10 @@ BIN = free_dap_rp2040
 ##############################################################################
 .PHONY: all directory clean size release
 
-CC = arm-none-eabi-gcc
+CC      = arm-none-eabi-gcc
 OBJCOPY = arm-none-eabi-objcopy
-SIZE = arm-none-eabi-size
+SIZE    = arm-none-eabi-size
+BIN2UF2 = bin2uf2
 
 ifeq ($(OS), Windows_NT)
   MKDIR = gmkdir
@@ -68,7 +69,7 @@ $(BUILD)/$(BIN).bin: $(BUILD)/$(BIN).elf
 
 $(BUILD)/$(BIN).uf2: $(BUILD)/$(BIN).bin
 	@echo BIN2UF2 $@
-	@bin2uf2 -i $^ -o $@
+	@$(BIN2UF2) -i $^ -o $@
 
 %.o:
 	@echo CC $@
