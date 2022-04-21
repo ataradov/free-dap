@@ -183,6 +183,8 @@ void UART_SERCOM_IRQ_HANDLER(void)
     int wr = (uart_rx_fifo.wr + 1) % UART_BUF_SIZE;
     int state = 0;
 
+    UART_SERCOM->USART.STATUS.reg = status;
+
     if (status & SERCOM_USART_STATUS_BUFOVF)
       state |= USB_CDC_SERIAL_STATE_OVERRUN;
 
