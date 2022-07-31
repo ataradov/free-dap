@@ -13,7 +13,7 @@
 #define DAP_CONFIG_DEFAULT_CLOCK       1000000 // Hz
 
 #define DAP_CONFIG_PACKET_SIZE         64
-#define DAP_CONFIG_PACKET_COUNT        1
+#define DAP_CONFIG_PACKET_COUNT        2
 
 #define DAP_CONFIG_JTAG_DEV_COUNT      8
 
