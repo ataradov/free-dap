@@ -27,9 +27,7 @@ static alignas(4) uint8_t app_req_buf[DAP_CONFIG_PACKET_SIZE];
 static alignas(4) uint8_t app_resp_buf[DAP_CONFIG_PACKET_SIZE];
 static int app_req_buf_hid_size = 0;
 static int app_req_buf_bulk_size = 0;
-static int app_resp_size = 0;
 static bool app_resp_free = true;
-static int app_resp_interface;
 static uint64_t app_system_time = 0;
 static uint64_t app_status_timeout = 0;
 static bool app_dap_event = false;
@@ -280,9 +278,52 @@ static void usb_bulk_recv_callback(int size)
 }
 
 //-----------------------------------------------------------------------------
+static void dap_task(void)
+{
+  int interface, size;
+
+  if (!app_resp_free)
+    return;
+
+  if (app_req_buf_hid_size)
+  {
+    interface = USB_INTF_HID;
+    size = app_req_buf_hid_size;
+    app_req_buf_hid_size = 0;
+
+    memcpy(app_req_buf, app_req_buf_hid, size);
+
+    usb_hid_recv(app_req_buf_hid, sizeof(app_req_buf_hid));
+  }
+  else if (app_req_buf_bulk_size)
+  {
+    interface = USB_INTF_BULK;
+    size = app_req_buf_bulk_size;
+    app_req_buf_bulk_size = 0;
+
+    memcpy(app_req_buf, app_req_buf_bulk, size);
+
+    usb_recv(USB_BULK_EP_RECV, app_req_buf_bulk, sizeof(app_req_buf_bulk));
+  }
+  else
+  {
+    return;
+  }
+
+  size = dap_process_request(app_req_buf, size, app_resp_buf, sizeof(app_resp_buf));
+
+  if (USB_INTF_BULK == interface)
+    usb_send(USB_BULK_EP_SEND, app_resp_buf, size);
+  else
+    usb_hid_send(app_resp_buf, sizeof(app_resp_buf));
+
+  app_resp_free = false;
+  app_dap_event = true;
+}
+
+//-----------------------------------------------------------------------------
 void usb_configuration_callback(int config)
 {
-  app_resp_size = 0;
   app_resp_free = true;
   app_req_buf_hid_size = 0;
   app_req_buf_bulk_size = 0;
@@ -326,52 +367,6 @@ static void status_timer_task(void)
 
   app_vcp_event = false;
 #endif
-}
-
-//-----------------------------------------------------------------------------
-static void dap_task(void)
-{
-  int size;
-
-  if (app_resp_size && app_resp_free)
-  {
-    if (USB_INTF_BULK == app_resp_interface)
-      usb_send(USB_BULK_EP_SEND, app_resp_buf, app_resp_size);
-    else
-      usb_hid_send(app_resp_buf, sizeof(app_resp_buf));
-
-    app_resp_free = false;
-    app_resp_size = 0;
-  }
-
-  if (app_req_buf_hid_size)
-  {
-    size = app_req_buf_hid_size;
-    app_req_buf_hid_size = 0;
-    app_resp_interface = USB_INTF_HID;
-
-    memcpy(app_req_buf, app_req_buf_hid, size);
-
-    usb_hid_recv(app_req_buf_hid, sizeof(app_req_buf_hid));
-  }
-  else if (app_req_buf_bulk_size)
-  {
-    size = app_req_buf_bulk_size;
-    app_req_buf_bulk_size = 0;
-    app_resp_interface = USB_INTF_BULK;
-
-    memcpy(app_req_buf, app_req_buf_bulk, size);
-
-    usb_recv(USB_BULK_EP_RECV, app_req_buf_bulk, sizeof(app_req_buf_bulk));
-  }
-  else
-  {
-    return;
-  }
-
-  app_dap_event = true;
-
-  app_resp_size = dap_process_request(app_req_buf, size, app_resp_buf, sizeof(app_resp_buf));
 }
 
 //-----------------------------------------------------------------------------
