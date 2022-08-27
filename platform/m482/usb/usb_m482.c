@@ -166,15 +166,27 @@ void usb_send(int ep, uint8_t *data, int size)
   switch (ep)
   {
     case USB_HID_EP_SEND:
+    {
+      USBD->EP[USB_HID_EP_RECV+1].CFGP |= USBD_CFGP_CLRRDY_Msk;
+      idx = ep + 1;
+      break;
+    }
     case USB_BULK_EP_SEND:
     {
+      USBD->EP[USB_BULK_EP_RECV+1].CFGP |= USBD_CFGP_CLRRDY_Msk;
       idx = ep + 1;
       break;
     }
     default:
       while (1); // Invalid ep
   }
+
+  // Save last send data
+  usb_ep_size[idx] = size;
+  usb_ep_data[idx] = data;
+
   uint8_t* ep_buf = (uint8_t *)(USBD_BUF_BASE + USBD->EP[idx].BUFSEG);
+  USBD->EP[idx].CFGP &= ~(USBD_CFGP_CLRRDY_Msk|USBD_CFGP_SSTALL_Msk);
   while (size)
   {
     // Copy to EP buffer
@@ -190,6 +202,10 @@ void usb_send(int ep, uint8_t *data, int size)
     size -= transfer_size;
     data += transfer_size;
   }
+
+  // Stop it from repeating the same response...
+  USBD->EP[idx].MXPLD = 0;
+  USBD->EP[idx].CFGP |= USBD_CFGP_CLRRDY_Msk;
 }
 
 //-----------------------------------------------------------------------------
@@ -209,6 +225,7 @@ void usb_recv(int ep, uint8_t *data, int size)
   }
   usb_ep_size[idx] = size;
   usb_ep_data[idx] = data;
+  USBD->EP[idx].CFGP &= ~USBD_CFGP_CLRRDY_Msk;
   USBD->EP[idx].MXPLD = size; // Ready to recv
 }
 
@@ -319,10 +336,6 @@ void usb_task(void)
       // Setup is always Data 0 so reply with data 1
       USBD->EP[0].CFG |= USBD_CFG_DSQSYNC_Msk;
 
-      // Halt until ready
-      USBD->EP[0].CFGP |= USBD_CFGP_CLRRDY_Msk;
-      USBD->EP[1].CFGP |= USBD_CFGP_CLRRDY_Msk;
-
       if (!usb_handle_standard_request(&request))
         usb_control_stall();
 
@@ -374,31 +387,62 @@ void usb_task(void)
               usb_control_recv_callback = NULL;
               usb_control_send_zlp();
             }
-            else
-              USBD->EP[ep].CFGP &= ~USBD_CFGP_SSTALL_Msk; // Clear stalls
           }
           else
           {
             if (usb_ep_data[ep] == NULL)
               continue;
 
-            for (int i = 0; i < size; i++)
-              usb_ep_data[ep][i] = ep_buf[i];
+            int offset = 0;
+            while (offset < usb_ep_size[ep])
+            {
+              for (int i = 0; i < size; i++)
+                usb_ep_data[ep][offset + i] = ep_buf[i];
+
+              if (size < USB_DAP_EP_SIZE)
+                break;
+
+              // Read more
+              offset += USB_DAP_EP_SIZE;
+              int remaining = USB_LIMIT(USB_DAP_EP_SIZE, usb_ep_size[ep] - offset);
+              if (remaining == 0)
+                break;
+              USBD->EP[ep].MXPLD = remaining;
+              int timeout = 10000;
+              while (0 == (USBD->INTSTS & USBD_INTSTS_USBIF_Msk) && timeout > 0) {
+                timeout -= 1;
+              }
+              if (timeout == 0)
+                  break;
+              USBD->INTSTS = USBD_INTSTS_USBIF_Msk;
+              size = USBD->EP[ep].MXPLD & USBD_MXPLD_MXPLD_Msk;
+            }
 
             usb_ep_data[ep] = NULL;
-            usb_recv_callback(ep-1, size);
+            usb_recv_callback(ep-1, offset+size);
           }
           break;
         }
         case 0b0000: // In Ack
         {
-            if (ep == 0)
-              usb_send_callback(ep);
-            else
-              usb_send_callback(ep - 1);
-            break;
+          if (usb_ep_data[ep] != NULL)
+              usb_ep_data[ep] = NULL; // Sent OK
+          if (ep == 0)
+            usb_send_callback(ep);
+          else
+            usb_send_callback(ep - 1);
+          break;
         }
-        case 0b0001: // In Nack
+        case 0b0001: // In Nack, retry?
+        {
+          if (ep > 0)
+          {
+            if (usb_ep_data[ep] == NULL)
+                continue;
+            usb_send(ep-1, usb_ep_data[ep], usb_ep_size[ep]);
+          }
+          break;
+        }
         case 0b1111: // Iso transfer end
         default:
         {
