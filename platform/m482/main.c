@@ -287,6 +287,7 @@ void usb_hid_recv_callback(int size)
   dap_process_request(app_req_buf_hid, sizeof(app_req_buf_hid),
       app_resp_buf_hid, sizeof(app_resp_buf_hid));
   usb_hid_send(app_resp_buf_hid, sizeof(app_resp_buf_hid));
+  usb_hid_send_callback(); // Re-enable rx
   (void)size;
 }
 
@@ -303,6 +304,7 @@ static void usb_bulk_recv_callback(int size)
   size = dap_process_request(app_req_buf_bulk, size,
       app_resp_buf_bulk, sizeof(app_resp_buf_bulk));
   usb_send(USB_BULK_EP_SEND, app_resp_buf_bulk, size);
+  usb_bulk_send_callback(); // Re-enable rx
 }
 
 //-----------------------------------------------------------------------------

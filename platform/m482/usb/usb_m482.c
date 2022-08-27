@@ -385,10 +385,8 @@ void usb_task(void)
             for (int i = 0; i < size; i++)
               usb_ep_data[ep][i] = ep_buf[i];
 
+            usb_ep_data[ep] = NULL;
             usb_recv_callback(ep-1, size);
-
-            // Do not clear, usb_ep_data, just re-enable
-            USBD->EP[ep].MXPLD = usb_ep_size[ep];
           }
           break;
         }

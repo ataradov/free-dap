@@ -245,6 +245,7 @@ void usb_send_callback(int ep)
   int idx;
   switch (ep)
   {
+    case 0:
     case USB_HID_EP_SEND:
     case USB_BULK_EP_SEND:
     {
@@ -264,6 +265,7 @@ void usb_recv_callback(int ep, int size)
   int idx;
   switch (ep)
   {
+    case 0:
     case USB_HID_EP_RECV:
     case USB_BULK_EP_RECV:
     {
