@@ -44,9 +44,11 @@
 #elif defined(HAL_BOARD_JEFF_PROBE)
   #define HAL_CONFIG_ENABLE_VCP
   #define DAP_CONFIG_ENABLE_JTAG
+  #define DAP_CONFIG_HAS_TMS_DIR
 
   HAL_GPIO_PIN(SWCLK_TCK,          A, 6)
   HAL_GPIO_PIN(SWDIO_TMS,          A, 0)
+  HAL_GPIO_PIN(SWDIO_TMS_DIR,      A, 15)
   HAL_GPIO_PIN(TDI,                A, 16)
   HAL_GPIO_PIN(TDO,                A, 19)
   HAL_GPIO_PIN(nRESET,             A, 8)
