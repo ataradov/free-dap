@@ -29,10 +29,22 @@
 /*- Includes ----------------------------------------------------------------*/
 #include "samd21.h"
 #include "nvm_data.h"
+#include "hal_config.h"
+
 //-----------------------------------------------------------------------------
 void sys_init(void)
 {
   uint32_t coarse, fine;
+
+#ifdef HAL_CONFIG_HAS_PWR_STATUS
+  HAL_GPIO_PWR_STATUS_out();
+  HAL_GPIO_PWR_STATUS_set();
+#endif
+
+#ifdef DAP_CONFIG_SUPPLY_PWR
+  HAL_GPIO_SUPPLY_PWR_out();
+  HAL_GPIO_SUPPLY_PWR_set();
+#endif
 
   SYSCTRL->OSC8M.bit.PRESC = 0;
 
