@@ -30,19 +30,21 @@ LDFLAGS += -flto
 
 INCLUDES += \
   -I../include \
-  -I../usb \
+  -I../../samdx1/usb \
+  -I../../samdx1 \
   -I../../.. \
   -I..
 
 SRCS += \
-  ../main.c \
-  ../uart.c \
-  ../usb/usb_samd11.c \
-  ../usb/usb_std.c \
-  ../usb/usb_cdc.c \
-  ../usb/usb_hid.c \
-  ../usb/usb_winusb.c \
-  ../usb_descriptors.c \
+  ../sys_init.c \
+  ../../samdx1/main.c \
+  ../../samdx1/uart.c \
+  ../../samdx1/usb/usb_samdx1.c \
+  ../../samdx1/usb/usb_std.c \
+  ../../samdx1/usb/usb_cdc.c \
+  ../../samdx1/usb/usb_hid.c \
+  ../../samdx1/usb/usb_winusb.c \
+  ../../samdx1/usb_descriptors.c \
   ../startup_samd11.c \
   ../../../dap.c \
 

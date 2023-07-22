@@ -25,24 +25,31 @@ CFLAGS += -flto
 
 LDFLAGS += -mcpu=cortex-m0plus -mthumb
 LDFLAGS += -Wl,--gc-sections
-LDFLAGS += -Wl,--script=../linker/samd21j18.ld
+LDFLAGS += -Wl,--script=../linker/samd21e17_bl_8k.ld
 LDFLAGS += -flto
 
 INCLUDES += \
   -I../include \
+  -I../../samdx1/usb \
+  -I../../samdx1 \
   -I../../.. \
   -I..
 
 SRCS += \
+  ../sys_init.c \
+  ../../samdx1/main.c \
+  ../../samdx1/uart.c \
+  ../../samdx1/usb/usb_samdx1.c \
+  ../../samdx1/usb/usb_std.c \
+  ../../samdx1/usb/usb_cdc.c \
+  ../../samdx1/usb/usb_hid.c \
+  ../../samdx1/usb/usb_winusb.c \
+  ../../samdx1/usb_descriptors.c \
+  ../startup_samd21.c \
   ../../../dap.c \
-  ../main.c \
-  ../udc.c \
-  ../usb.c \
-  ../usb_descriptors.c \
-  ../startup_samd21.c
 
 DEFINES += \
-  -D__SAMD21J18A__ \
+  -D__SAMD21E17A__ \
   -DDONT_USE_CMSIS_INIT \
   -DF_CPU=48000000
 

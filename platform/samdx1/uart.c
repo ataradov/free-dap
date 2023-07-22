@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include "samd11.h"
+#include "samdx1.h"
 #include "hal_config.h"
 #include "uart.h"
 #include "usb_cdc.h"

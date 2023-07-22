@@ -26,59 +26,38 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _USB_DESCRIPTORS_H_
-#define _USB_DESCRIPTORS_H_
-
 /*- Includes ----------------------------------------------------------------*/
-#include "usb.h"
-#include "utils.h"
-
-/*- Definitions -------------------------------------------------------------*/
-enum
-{
-  USB_HID_DESCRIPTOR          = 0x21,
-  USB_HID_REPORT_DESCRIPTOR   = 0x22,
-  USB_HID_PHYSICAL_DESCRIPTOR = 0x23,
-};
-
-enum
-{
-  USB_STR_ZERO,
-  USB_STR_MANUFACTURER,
-  USB_STR_PRODUCT,
-  USB_STR_SERIAL_NUMBER,
-  USB_STR_CONFIGURATION,
-  USB_STR_INTERFACE,
-  USB_STR_COUNT,
-};
-
-/*- Types -------------------------------------------------------------------*/
-typedef struct PACK
-{
-  uint8_t   bLength;
-  uint8_t   bDescriptorType;
-  uint16_t  bcdHID;
-  uint8_t   bCountryCode;
-  uint8_t   bNumDescriptors;
-  uint8_t   bDescriptorType1;
-  uint16_t  wDescriptorLength;
-} usb_hid_descriptor_t;
-
-typedef struct PACK
-{
-  usb_configuration_descriptor_t  configuration;
-  usb_interface_descriptor_t      interface;
-  usb_hid_descriptor_t            hid;
-  usb_endpoint_descriptor_t       ep_in;
-  usb_endpoint_descriptor_t       ep_out;
-} usb_configuration_hierarchy_t;
-
+#include "samd21.h"
+#include "nvm_data.h"
 //-----------------------------------------------------------------------------
-extern const usb_device_descriptor_t usb_device_descriptor;
-extern const usb_configuration_hierarchy_t usb_configuration_hierarchy;
-extern const uint8_t usb_hid_report_descriptor[28];
-extern const usb_string_descriptor_zero_t usb_string_descriptor_zero;
-extern const char *const usb_strings[];
+void sys_init(void)
+{
+  uint32_t coarse, fine;
 
-#endif // _USB_DESCRIPTORS_H_
+  SYSCTRL->OSC8M.bit.PRESC = 0;
+
+  SYSCTRL->INTFLAG.reg = SYSCTRL_INTFLAG_BOD33RDY | SYSCTRL_INTFLAG_BOD33DET |
+      SYSCTRL_INTFLAG_DFLLRDY;
+
+  NVMCTRL->CTRLB.bit.RWS = 1;
+
+  coarse = NVM_READ_CAL(NVM_DFLL48M_COARSE_CAL);
+  fine = NVM_READ_CAL(NVM_DFLL48M_FINE_CAL);
+
+  SYSCTRL->DFLLCTRL.reg = 0; // See Errata 9905
+  while (0 == (SYSCTRL->PCLKSR.reg & SYSCTRL_PCLKSR_DFLLRDY));
+
+  SYSCTRL->DFLLMUL.reg = SYSCTRL_DFLLMUL_MUL(48000);
+  SYSCTRL->DFLLVAL.reg = SYSCTRL_DFLLVAL_COARSE(coarse) | SYSCTRL_DFLLVAL_FINE(fine);
+
+  SYSCTRL->DFLLCTRL.reg = SYSCTRL_DFLLCTRL_ENABLE | SYSCTRL_DFLLCTRL_USBCRM |
+      SYSCTRL_DFLLCTRL_MODE | SYSCTRL_DFLLCTRL_BPLCKC | SYSCTRL_DFLLCTRL_CCDIS |
+      SYSCTRL_DFLLCTRL_STABLE;
+
+  while (0 == (SYSCTRL->PCLKSR.reg & SYSCTRL_PCLKSR_DFLLRDY));
+
+  GCLK->GENCTRL.reg = GCLK_GENCTRL_ID(0) | GCLK_GENCTRL_SRC(GCLK_SOURCE_DFLL48M) |
+      GCLK_GENCTRL_RUNSTDBY | GCLK_GENCTRL_GENEN;
+  while (GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
+}
 
