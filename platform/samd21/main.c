@@ -46,6 +46,13 @@ static bool app_vcp_event = false;
 static bool app_vcp_open = false;
 #endif
 
+#ifdef HAL_CONFIG_CUSTOM_LED
+extern void custom_hal_gpio_dap_status_toggle();
+extern void custom_hal_gpio_dap_status_set();
+extern void custom_hal_gpio_vcp_status_toggle();
+extern void custom_hal_gpio_vcp_status_write(int val);
+#endif
+
 /*- Implementations ---------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -353,17 +360,33 @@ static void status_timer_task(void)
   app_status_timeout = app_system_time + STATUS_TIMEOUT;
 
   if (app_dap_event)
+#ifdef HAL_CONFIG_CUSTOM_LED
+    custom_hal_gpio_dap_status_toggle();
+#else
     HAL_GPIO_DAP_STATUS_toggle();
+#endif
   else
+#ifdef HAL_CONFIG_CUSTOM_LED
+    custom_hal_gpio_dap_status_set();
+#else
     HAL_GPIO_DAP_STATUS_set();
+#endif
 
   app_dap_event = false;
 
 #ifdef HAL_CONFIG_ENABLE_VCP
   if (app_vcp_event)
+#ifdef HAL_CONFIG_CUSTOM_LED
+    custom_hal_gpio_vcp_status_toggle();
+#else
     HAL_GPIO_VCP_STATUS_toggle();
+#endif
   else
+#ifdef HAL_CONFIG_CUSTOM_LED
+    custom_hal_gpio_vcp_status_write(app_vcp_open);
+#else
     HAL_GPIO_VCP_STATUS_write(app_vcp_open);
+#endif
 
   app_vcp_event = false;
 #endif
