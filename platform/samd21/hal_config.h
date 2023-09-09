@@ -11,6 +11,7 @@
 /*- Definitions -------------------------------------------------------------*/
 //#define HAL_BOARD_STD
 #define HAL_BOARD_JEFF_PROBE
+#define DAP_CONFIG_SUPPLY_PWR
 //#define HAL_BOARD_VCP_V1
 //#define HAL_BOARD_VCP_V3
 //#define HAL_BOARD_OBD

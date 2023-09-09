@@ -171,7 +171,7 @@ void sys_init(void)
 
 #ifdef DAP_CONFIG_SUPPLY_PWR
   HAL_GPIO_SUPPLY_PWR_out();
-  HAL_GPIO_SUPPLY_PWR_set();
+  HAL_GPIO_SUPPLY_PWR_clr();
 #endif
 
 #ifdef HAL_CONFIG_HAS_PWR_STATUS
