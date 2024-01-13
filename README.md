@@ -18,7 +18,7 @@ To create a CMSIS-DAP compliant debugger, your platform must:
 Free-DAP library itself is protocol agnostic and implementation of the specific version
 of the CMSIS-DAP protocol (v1 or v2) is up to the individual platforms.
 
-Currently RP2040 and SAM D11 implementaitons were updated to support CMSIS-DAP v2.
+Currently RP2040, SAM D11 and SAM D21 implementaitons were updated to support CMSIS-DAP v2.
 Other platforms would be updated if requested or needed by me.
 
 ## Configuration
