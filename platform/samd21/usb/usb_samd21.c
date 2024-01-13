@@ -1,43 +1,20 @@
-/*
- * Copyright (c) 2016, Alex Taradov <alex@taradov.com>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2022, Alex Taradov <alex@taradov.com>. All rights reserved.
 
 /*- Includes ----------------------------------------------------------------*/
-#include <stdbool.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stdalign.h>
 #include "samd21.h"
 #include "hal_gpio.h"
-#include "udc.h"
-#include "usb.h"
-#include "utils.h"
 #include "nvm_data.h"
+#include "usb.h"
+#include "usb_std.h"
 #include "usb_descriptors.h"
 
 /*- Definitions -------------------------------------------------------------*/
+#define USB_EP_NUM     8
+
 HAL_GPIO_PIN(USB_DM,   A, 24);
 HAL_GPIO_PIN(USB_DP,   A, 25);
 
@@ -75,14 +52,19 @@ typedef union
 } udc_mem_t;
 
 /*- Variables ---------------------------------------------------------------*/
-static udc_mem_t udc_mem[USB_EPT_NUM];
-static uint32_t udc_ctrl_in_buf[16];
-static uint32_t udc_ctrl_out_buf[16];
+static alignas(4) udc_mem_t udc_mem[USB_EP_NUM];
+static alignas(4) uint8_t usb_ctrl_in_buf[64];
+static alignas(4) uint8_t usb_ctrl_out_buf[64];
+static void (*usb_control_recv_callback)(uint8_t *data, int size);
+static int usb_setup_length;
+
+/*- Prototypes --------------------------------------------------------------*/
+static void usb_reset_endpoints(void);
 
 /*- Implementations ---------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
-void udc_init(void)
+void usb_hw_init(void)
 {
   HAL_GPIO_USB_DM_pmuxen(PORT_PMUX_PMUXE_G_Val);
   HAL_GPIO_USB_DP_pmuxen(PORT_PMUX_PMUXE_G_Val);
@@ -99,7 +81,11 @@ void udc_init(void)
   USB->DEVICE.PADCAL.bit.TRANSP = NVM_READ_CAL(NVM_USB_TRANSP);
   USB->DEVICE.PADCAL.bit.TRIM   = NVM_READ_CAL(NVM_USB_TRIM);
 
-  memset((uint8_t *)udc_mem, 0, sizeof(udc_mem));
+  usb_setup_length = -1;
+
+  for (int i = 0; i < (int)sizeof(udc_mem); i++)
+    ((uint8_t *)udc_mem)[i] = 0;
+
   USB->DEVICE.DESCADD.reg = (uint32_t)udc_mem;
 
   USB->DEVICE.CTRLA.bit.MODE = USB_CTRLA_MODE_DEVICE_Val;
@@ -112,38 +98,30 @@ void udc_init(void)
 
   USB->DEVICE.CTRLA.reg |= USB_CTRLA_ENABLE;
 
-  for (int i = 0; i < USB_EPT_NUM; i++)
-  {
-    udc_reset_endpoint(i, USB_IN_ENDPOINT);
-    udc_reset_endpoint(i, USB_OUT_ENDPOINT);
-  }
-
-  NVIC_EnableIRQ(USB_IRQn);
+  usb_reset_endpoints();
 }
 
 //-----------------------------------------------------------------------------
-void udc_attach(void)
+void usb_attach(void)
 {
   USB->DEVICE.CTRLB.bit.DETACH = 0;
 }
 
 //-----------------------------------------------------------------------------
-void udc_detach(void)
+void usb_detach(void)
 {
   USB->DEVICE.CTRLB.bit.DETACH = 1;
 }
 
 //-----------------------------------------------------------------------------
-void udc_reset_endpoint(int ep, int dir)
+static void usb_reset_endpoints(void)
 {
-  if (USB_IN_ENDPOINT == dir)
-    USB->DEVICE.DeviceEndpoint[ep].EPCFG.bit.EPTYPE1 = USB_DEVICE_EPCFG_EPTYPE_DISABLED;
-  else
-    USB->DEVICE.DeviceEndpoint[ep].EPCFG.bit.EPTYPE0 = USB_DEVICE_EPCFG_EPTYPE_DISABLED;
+  for (int i = 0; i < USB_EP_NUM; i++)
+    USB->DEVICE.DeviceEndpoint[i].EPCFG.reg = 0;
 }
 
 //-----------------------------------------------------------------------------
-void udc_configure_endpoint(usb_endpoint_descriptor_t *desc)
+void usb_configure_endpoint(usb_endpoint_descriptor_t *desc)
 {
   int ep, dir, type, size;
 
@@ -151,8 +129,6 @@ void udc_configure_endpoint(usb_endpoint_descriptor_t *desc)
   dir = desc->bEndpointAddress & USB_DIRECTION_MASK;
   type = desc->bmAttributes & 0x03;
   size = desc->wMaxPacketSize & 0x3ff;
-
-  udc_reset_endpoint(ep, dir);
 
   if (size <= 8)
     size = USB_DEVICE_PCKSIZE_SIZE_8;
@@ -201,7 +177,7 @@ void udc_configure_endpoint(usb_endpoint_descriptor_t *desc)
 }
 
 //-----------------------------------------------------------------------------
-bool udc_endpoint_configured(int ep, int dir)
+bool usb_endpoint_configured(int ep, int dir)
 {
   if (USB_IN_ENDPOINT == dir)
     return (USB_DEVICE_EPCFG_EPTYPE_DISABLED != USB->DEVICE.DeviceEndpoint[ep].EPCFG.bit.EPTYPE1);
@@ -210,7 +186,7 @@ bool udc_endpoint_configured(int ep, int dir)
 }
 
 //-----------------------------------------------------------------------------
-int udc_endpoint_get_status(int ep, int dir)
+int usb_endpoint_get_status(int ep, int dir)
 {
   if (USB_IN_ENDPOINT == dir)
     return USB->DEVICE.DeviceEndpoint[ep].EPSTATUS.bit.STALLRQ1;
@@ -219,7 +195,7 @@ int udc_endpoint_get_status(int ep, int dir)
 }
 
 //-----------------------------------------------------------------------------
-void udc_endpoint_set_feature(int ep, int dir)
+void usb_endpoint_set_feature(int ep, int dir)
 {
   if (USB_IN_ENDPOINT == dir)
     USB->DEVICE.DeviceEndpoint[ep].EPSTATUSSET.bit.STALLRQ1 = 1;
@@ -228,7 +204,7 @@ void udc_endpoint_set_feature(int ep, int dir)
 }
 
 //-----------------------------------------------------------------------------
-void udc_endpoint_clear_feature(int ep, int dir)
+void usb_endpoint_clear_feature(int ep, int dir)
 {
   if (USB_IN_ENDPOINT == dir)
   {
@@ -238,7 +214,7 @@ void udc_endpoint_clear_feature(int ep, int dir)
 
       if (USB->DEVICE.DeviceEndpoint[ep].EPINTFLAG.bit.STALL1)
       {
-        USB->DEVICE.DeviceEndpoint[ep].EPINTFLAG.bit.STALL1 = 1;
+        USB->DEVICE.DeviceEndpoint[ep].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_STALL1;
         USB->DEVICE.DeviceEndpoint[ep].EPSTATUSCLR.bit.DTGLIN = 1;
       }
     }
@@ -251,7 +227,7 @@ void udc_endpoint_clear_feature(int ep, int dir)
 
       if (USB->DEVICE.DeviceEndpoint[ep].EPINTFLAG.bit.STALL0)
       {
-        USB->DEVICE.DeviceEndpoint[ep].EPINTFLAG.bit.STALL0 = 1;
+        USB->DEVICE.DeviceEndpoint[ep].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_STALL0;
         USB->DEVICE.DeviceEndpoint[ep].EPSTATUSCLR.bit.DTGLOUT = 1;
       }
     }
@@ -259,13 +235,13 @@ void udc_endpoint_clear_feature(int ep, int dir)
 }
 
 //-----------------------------------------------------------------------------
-void udc_set_address(int address)
+void usb_set_address(int address)
 {
   USB->DEVICE.DADD.reg = USB_DEVICE_DADD_ADDEN | USB_DEVICE_DADD_DADD(address);
 }
 
 //-----------------------------------------------------------------------------
-void udc_send(int ep, uint8_t *data, int size)
+void usb_send(int ep, uint8_t *data, int size)
 {
   udc_mem[ep].in.ADDR.reg = (uint32_t)data;
   udc_mem[ep].in.PCKSIZE.bit.BYTE_COUNT = size;
@@ -275,7 +251,7 @@ void udc_send(int ep, uint8_t *data, int size)
 }
 
 //-----------------------------------------------------------------------------
-void udc_recv(int ep, uint8_t *data, int size)
+void usb_recv(int ep, uint8_t *data, int size)
 {
   udc_mem[ep].out.ADDR.reg = (uint32_t)data;
   udc_mem[ep].out.PCKSIZE.bit.MULTI_PACKET_SIZE = size;
@@ -285,60 +261,72 @@ void udc_recv(int ep, uint8_t *data, int size)
 }
 
 //-----------------------------------------------------------------------------
-void udc_control_send_zlp(void)
+void usb_control_send_zlp(void)
 {
   udc_mem[0].in.PCKSIZE.bit.BYTE_COUNT = 0;
-  USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.bit.TRCPT1 = 1;
+  USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_TRCPT1;
   USB->DEVICE.DeviceEndpoint[0].EPSTATUSSET.bit.BK1RDY = 1;
 
   while (0 == USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.bit.TRCPT1);
 }
 
 //-----------------------------------------------------------------------------
-void udc_control_stall(void)
+void usb_control_stall(void)
 {
   USB->DEVICE.DeviceEndpoint[0].EPSTATUSSET.bit.STALLRQ1 = 1;
 }
 
 //-----------------------------------------------------------------------------
-void udc_control_send(uint8_t *data, int size)
+void usb_control_send(uint8_t *data, int size)
 {
-  if (size <= usb_device_descriptor.bMaxPacketSize0)
+  bool need_zlp = (size < usb_setup_length) &&
+      ((size & (usb_device_descriptor.bMaxPacketSize0-1)) == 0);
+
+  // USB controller does not have access to the flash memory, so here we do
+  // a manual multi-packet transfer. This way data can be located in in
+  // the flash memory (big constant descriptors).
+
+  while (size)
   {
-    // Small payloads may be unaligned, so copy them into an aligned buffer
-    memcpy(udc_ctrl_in_buf, data, size);
-    udc_mem[0].in.ADDR.reg = (uint32_t)udc_ctrl_in_buf;
+    int transfer_size = USB_LIMIT(size, usb_device_descriptor.bMaxPacketSize0);
+
+    for (int i = 0; i < transfer_size; i++)
+      usb_ctrl_in_buf[i] = data[i];
+
+    udc_mem[0].in.ADDR.reg = (uint32_t)usb_ctrl_in_buf;
+    udc_mem[0].in.PCKSIZE.bit.BYTE_COUNT = transfer_size;
+    udc_mem[0].in.PCKSIZE.bit.MULTI_PACKET_SIZE = 0;
+
+    USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_TRCPT1;
+    USB->DEVICE.DeviceEndpoint[0].EPSTATUSSET.bit.BK1RDY = 1;
+
+    while (0 == USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.bit.TRCPT1);
+
+    size -= transfer_size;
+    data += transfer_size;
   }
-  else
-  {
-    // Large payloads must be aligned
-    udc_mem[0].in.ADDR.reg = (uint32_t)data;
-  }
 
-  udc_mem[0].in.PCKSIZE.bit.BYTE_COUNT = size;
-  udc_mem[0].in.PCKSIZE.bit.MULTI_PACKET_SIZE = 0;
-
-  USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.bit.TRCPT1 = 1;
-  USB->DEVICE.DeviceEndpoint[0].EPSTATUSSET.bit.BK1RDY = 1;
-
-  while (0 == USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.bit.TRCPT1);
+  if (need_zlp)
+    usb_control_send_zlp();
 }
 
 //-----------------------------------------------------------------------------
-void irq_handler_usb(void)
+void usb_control_recv(void (*callback)(uint8_t *data, int size))
 {
-  int epint, flags;
+  usb_control_recv_callback = callback;
+}
+
+//-----------------------------------------------------------------------------
+void usb_task(void)
+{
+  int flags, epints;
 
   if (USB->DEVICE.INTFLAG.bit.EORST)
   {
     USB->DEVICE.INTFLAG.reg = USB_DEVICE_INTFLAG_EORST;
     USB->DEVICE.DADD.reg = USB_DEVICE_DADD_ADDEN;
 
-    for (int i = 0; i < USB_EPT_NUM; i++)
-    {
-      udc_reset_endpoint(i, USB_IN_ENDPOINT);
-      udc_reset_endpoint(i, USB_OUT_ENDPOINT);
-    }
+    usb_reset_endpoints();
 
     USB->DEVICE.DeviceEndpoint[0].EPCFG.reg =
         USB_DEVICE_EPCFG_EPTYPE0(USB_DEVICE_EPCFG_EPTYPE_CONTROL) |
@@ -346,53 +334,79 @@ void irq_handler_usb(void)
     USB->DEVICE.DeviceEndpoint[0].EPSTATUSSET.bit.BK0RDY = 1;
     USB->DEVICE.DeviceEndpoint[0].EPSTATUSCLR.bit.BK1RDY = 1;
 
-    udc_mem[0].in.ADDR.reg = (uint32_t)udc_ctrl_in_buf;
     udc_mem[0].in.PCKSIZE.bit.SIZE = USB_DEVICE_PCKSIZE_SIZE_64;
-    udc_mem[0].in.PCKSIZE.bit.BYTE_COUNT = 0;
-    udc_mem[0].in.PCKSIZE.bit.MULTI_PACKET_SIZE = 0;
 
-    udc_mem[0].out.ADDR.reg = (uint32_t)udc_ctrl_out_buf;
+    udc_mem[0].out.ADDR.reg = (uint32_t)usb_ctrl_out_buf;
     udc_mem[0].out.PCKSIZE.bit.SIZE = USB_DEVICE_PCKSIZE_SIZE_64;
-    udc_mem[0].out.PCKSIZE.bit.MULTI_PACKET_SIZE = 8;
+    udc_mem[0].out.PCKSIZE.bit.MULTI_PACKET_SIZE = 64;
     udc_mem[0].out.PCKSIZE.bit.BYTE_COUNT = 0;
 
-    USB->DEVICE.DeviceEndpoint[0].EPSTATUSCLR.bit.BK0RDY = 1;
     USB->DEVICE.DeviceEndpoint[0].EPINTENSET.bit.RXSTP = 1;
+    USB->DEVICE.DeviceEndpoint[0].EPINTENSET.bit.TRCPT0 = 1;
   }
 
   if (USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.bit.RXSTP)
   {
-    USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.bit.RXSTP = 1;
-    USB->DEVICE.DeviceEndpoint[0].EPSTATUSCLR.bit.BK0RDY = 1;
+    usb_request_t *request = (usb_request_t *)usb_ctrl_out_buf;
 
-    usb_handle_standard_request((usb_request_t *)udc_ctrl_out_buf);
+    usb_setup_length = request->wLength;
+
+    if (sizeof(usb_request_t) == udc_mem[0].out.PCKSIZE.bit.BYTE_COUNT)
+    {
+      if (usb_handle_standard_request(request))
+      {
+        udc_mem[0].out.PCKSIZE.bit.BYTE_COUNT = 0;
+        USB->DEVICE.DeviceEndpoint[0].EPSTATUSCLR.bit.BK0RDY = 1;
+        USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_TRCPT0;
+      }
+      else
+      {
+        usb_control_stall();
+      }
+    }
+    else
+    {
+      usb_control_stall();
+    }
+
+    usb_setup_length = -1;
+
+    USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_RXSTP;
+  }
+  else if (USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.bit.TRCPT0)
+  {
+    if (usb_control_recv_callback)
+    {
+      usb_control_recv_callback(usb_ctrl_out_buf, udc_mem[0].out.PCKSIZE.bit.BYTE_COUNT);
+      usb_control_recv_callback = NULL;
+      usb_control_send_zlp();
+    }
+
+    USB->DEVICE.DeviceEndpoint[0].EPSTATUSSET.bit.BK0RDY = 1;
+    USB->DEVICE.DeviceEndpoint[0].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_TRCPT0;
   }
 
-  epint = USB->DEVICE.EPINTSMRY.reg;
+  epints = USB->DEVICE.EPINTSMRY.reg;
 
-  for (int i = 0; epint && i < USB_EPT_NUM; i++)
+  for (int i = 1; i < USB_EP_NUM && epints > 0; i++)
   {
-    if (0 == (epint & (1 << i)))
-      continue;
-
-    epint &= ~(1 << i);
-
     flags = USB->DEVICE.DeviceEndpoint[i].EPINTFLAG.reg;
+    epints &= ~(1 << i);
 
     if (flags & USB_DEVICE_EPINTFLAG_TRCPT0)
     {
-      USB->DEVICE.DeviceEndpoint[i].EPINTFLAG.bit.TRCPT0 = 1;
       USB->DEVICE.DeviceEndpoint[i].EPSTATUSSET.bit.BK0RDY = 1;
+      USB->DEVICE.DeviceEndpoint[i].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_TRCPT0;
 
-      udc_recv_callback(i);
+      usb_recv_callback(i, udc_mem[i].out.PCKSIZE.bit.BYTE_COUNT);
     }
 
     if (flags & USB_DEVICE_EPINTFLAG_TRCPT1)
     {
-      USB->DEVICE.DeviceEndpoint[i].EPINTFLAG.bit.TRCPT1 = 1;
       USB->DEVICE.DeviceEndpoint[i].EPSTATUSCLR.bit.BK1RDY = 1;
+      USB->DEVICE.DeviceEndpoint[i].EPINTFLAG.reg = USB_DEVICE_EPINTFLAG_TRCPT1;
 
-      udc_send_callback(i);
+      usb_send_callback(i);
     }
   }
 }

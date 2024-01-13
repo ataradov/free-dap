@@ -1,45 +1,19 @@
-/*
- * Copyright (c) 2016, Alex Taradov <alex@taradov.com>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024, Alex Taradov <alex@taradov.com>. All rights reserved.
 
 #ifndef _USB_DESCRIPTORS_H_
 #define _USB_DESCRIPTORS_H_
 
 /*- Includes ----------------------------------------------------------------*/
-#include "usb.h"
-#include "utils.h"
+#include "usb_std.h"
+#include "usb_cdc.h"
+#include "usb_hid.h"
+#include "usb_winusb.h"
+#include "hal_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
-enum
-{
-  USB_HID_DESCRIPTOR          = 0x21,
-  USB_HID_REPORT_DESCRIPTOR   = 0x22,
-  USB_HID_PHYSICAL_DESCRIPTOR = 0x23,
-};
+#define USB_ENABLE_BOS
+#define USB_BCD_VERSION      0x0210
 
 enum
 {
@@ -47,38 +21,96 @@ enum
   USB_STR_MANUFACTURER,
   USB_STR_PRODUCT,
   USB_STR_SERIAL_NUMBER,
-  USB_STR_CONFIGURATION,
-  USB_STR_INTERFACE,
+  USB_STR_CMSIS_DAP_V1,
+  USB_STR_CMSIS_DAP_V2,
+#ifdef HAL_CONFIG_ENABLE_VCP
+  USB_STR_COM_PORT,
+#endif
   USB_STR_COUNT,
 };
 
-/*- Types -------------------------------------------------------------------*/
-typedef struct PACK
+enum
 {
-  uint8_t   bLength;
-  uint8_t   bDescriptorType;
-  uint16_t  bcdHID;
-  uint8_t   bCountryCode;
-  uint8_t   bNumDescriptors;
-  uint8_t   bDescriptorType1;
-  uint16_t  wDescriptorLength;
-} usb_hid_descriptor_t;
+  USB_HID_EP_SEND  = 1,
+  USB_HID_EP_RECV  = 2,
+  USB_BULK_EP_RECV = 3,
+  USB_BULK_EP_SEND = 4,
+  USB_CDC_EP_COMM  = 5,
+  USB_CDC_EP_SEND  = 6,
+  USB_CDC_EP_RECV  = 7,
+};
 
-typedef struct PACK
+enum
 {
-  usb_configuration_descriptor_t  configuration;
-  usb_interface_descriptor_t      interface;
-  usb_hid_descriptor_t            hid;
-  usb_endpoint_descriptor_t       ep_in;
-  usb_endpoint_descriptor_t       ep_out;
+  USB_INTF_HID,
+  USB_INTF_BULK,
+#ifdef HAL_CONFIG_ENABLE_VCP
+  USB_INTF_CDC_COMM,
+  USB_INTF_CDC_DATA,
+#endif
+  USB_INTF_COUNT,
+};
+
+/*- Types -------------------------------------------------------------------*/
+typedef struct USB_PACK
+{
+  usb_configuration_descriptor_t                   configuration;
+
+  usb_interface_descriptor_t                       hid_interface;
+  usb_hid_descriptor_t                             hid;
+  usb_endpoint_descriptor_t                        hid_ep_in;
+  usb_endpoint_descriptor_t                        hid_ep_out;
+
+  usb_interface_descriptor_t                       bulk_interface;
+  usb_endpoint_descriptor_t                        bulk_ep_out;
+  usb_endpoint_descriptor_t                        bulk_ep_in;
+
+#ifdef HAL_CONFIG_ENABLE_VCP
+  usb_interface_association_descriptor_t           iad;
+  usb_interface_descriptor_t                       interface_comm;
+  usb_cdc_header_functional_descriptor_t           cdc_header;
+  usb_cdc_abstract_control_managment_descriptor_t  cdc_acm;
+  usb_cdc_call_managment_functional_descriptor_t   cdc_call_mgmt;
+  usb_cdc_union_functional_descriptor_t            cdc_union;
+  usb_endpoint_descriptor_t                        ep_comm;
+  usb_interface_descriptor_t                       interface_data;
+  usb_endpoint_descriptor_t                        ep_in;
+  usb_endpoint_descriptor_t                        ep_out;
+#endif
 } usb_configuration_hierarchy_t;
+
+typedef struct USB_PACK
+{
+  usb_binary_object_store_descriptor_t             bos;
+  usb_winusb_capability_descriptor_t               winusb;
+} usb_bos_hierarchy_t;
+
+typedef struct USB_PACK
+{
+  usb_winusb_subset_header_function_t              header;
+  usb_winusb_feature_compatble_id_t                comp_id;
+  usb_winusb_feature_reg_property_guids_t          property;
+} usb_msos_descriptor_subset_t;
+
+typedef struct USB_PACK
+{
+  usb_winusb_set_header_descriptor_t               header;
+  usb_msos_descriptor_subset_t                     subset;
+} usb_msos_descriptor_set_t;
 
 //-----------------------------------------------------------------------------
 extern const usb_device_descriptor_t usb_device_descriptor;
 extern const usb_configuration_hierarchy_t usb_configuration_hierarchy;
+extern const usb_bos_hierarchy_t usb_bos_hierarchy;
+extern const usb_msos_descriptor_set_t usb_msos_descriptor_set;
 extern const uint8_t usb_hid_report_descriptor[28];
 extern const usb_string_descriptor_zero_t usb_string_descriptor_zero;
-extern const char *const usb_strings[];
+extern const char *usb_strings[];
+#ifdef HAL_CONFIG_ENABLE_VCP
+extern const usb_class_handler_t usb_class_handlers[3];
+#else
+extern const usb_class_handler_t usb_class_handlers[2];
+#endif
+extern char usb_serial_number[16];
 
 #endif // _USB_DESCRIPTORS_H_
-
