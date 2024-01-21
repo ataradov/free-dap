@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
-// Copyright (c) 2017-2022, Alex Taradov <alex@taradov.com>. All rights reserved.
+// Copyright (c) 2024, Alex Taradov <alex@taradov.com>. All rights reserved.
 
 #ifndef _DAP_CONFIG_H_
 #define _DAP_CONFIG_H_
 
 /*- Includes ----------------------------------------------------------------*/
-#include "samd11.h"
+#include "samd21.h"
 #include "hal_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
@@ -34,7 +34,7 @@
 
 // A threshold for switching to fast clock (no added delays)
 // This is the frequency produced by dap_clock_test(1) on the SWCLK pin
-#define DAP_CONFIG_FAST_CLOCK          2400000 // Hz
+#define DAP_CONFIG_FAST_CLOCK          3600000 // Hz
 
 /*- Prototypes --------------------------------------------------------------*/
 extern char usb_serial_number[16];
