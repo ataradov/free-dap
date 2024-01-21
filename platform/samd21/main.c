@@ -47,15 +47,156 @@ static bool app_vcp_open = false;
 #endif
 
 #ifdef HAL_CONFIG_CUSTOM_LED
+
+// based upon 3MHz for TCC
+#define LED_PWM_PERIOD    3000
+// percentage of LED brigtness, 100 = Full brightness
+#define LED_BRIGHTNESS	  12.5
+
 extern void custom_hal_gpio_dap_status_toggle();
 extern void custom_hal_gpio_dap_status_set();
+static void led_custom_init();
+#ifdef HAL_CONFIG_ENABLE_VCP
 extern void custom_hal_gpio_vcp_status_toggle();
 extern void custom_hal_gpio_vcp_status_write(int val);
+#endif
 #endif
 
 /*- Implementations ---------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
+#ifdef HAL_CONFIG_CUSTOM_LED
+static void led_custom_init()
+{
+#ifdef HAL_BOARD_JEFF_PROBE
+  /* Enable the APB clock for TCC0 */
+  PM->APBCMASK.reg |= PM_APBCMASK_TCC0;
+  /* Enable GCLK1 and wire it up to TCC0 and TCC1. */
+  GCLK->CLKCTRL.reg = GCLK_CLKCTRL_CLKEN |GCLK_CLKCTRL_ID_TCC0_TCC1 |
+                    GCLK_CLKCTRL_GEN(0);
+  /* Wait until the clock bus is synchronized. */
+  while (GCLK->STATUS.bit.SYNCBUSY) {};
+
+  /* Configure the clock prescaler for each TCC.
+     This lets you divide up the clocks frequency to make the TCC count slower
+     than the clock. In this case, I'm dividing the 48MHz clock by 16 making the
+     TCC operate at 3MHz. This means each count (or "tick") is 0.33us.
+  */
+  TCC0->CTRLA.reg |= TCC_CTRLA_PRESCALER(TCC_CTRLA_PRESCALER_DIV16_Val);
+
+  TCC0->PER.reg = LED_PWM_PERIOD;
+  while (TCC0->SYNCBUSY.bit.PER) {};
+
+  /* Use "Normal PWM" */
+  TCC0->WAVE.reg = TCC_WAVE_WAVEGEN_NPWM;
+  /* Wait for bus synchronization */
+  while (TCC0->SYNCBUSY.bit.WAVE) {};
+
+  /* n for CC[n] is determined by n = x % 4 where x is from WO[x]
+   WO[x] comes from the peripheral multiplexer - we'll get to that in a second.
+  */
+  // CC3 used by DAP
+  TCC0->CC[3].reg = LED_PWM_PERIOD * LED_BRIGHTNESS /100;
+  while (TCC0->SYNCBUSY.bit.CC3) {};
+
+  // CC2 used by VCP
+#if defined(HAL_CONFIG_ENABLE_VCP)
+  TCC0->CC[2].reg = LED_PWM_PERIOD * LED_BRIGHTNESS /100 ;
+  while (TCC0->SYNCBUSY.bit.CC2) {};
+#endif
+
+  // CC0 used by Power LED
+#if defined(HAL_CONFIG_HAS_PWR_STATUS)
+  TCC0->CC[0].reg = LED_PWM_PERIOD * LED_BRIGHTNESS /100 ;
+  while (TCC0->SYNCBUSY.bit.CC0) {};
+#endif
+
+  TCC0->CTRLA.reg |= (TCC_CTRLA_ENABLE);
+  while (TCC0->SYNCBUSY.bit.ENABLE) {};
+
+  HAL_GPIO_DAP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+  HAL_GPIO_DAP_STATUS_clr();
+
+#if defined(HAL_CONFIG_ENABLE_VCP)
+  /* set alt func */
+  HAL_GPIO_VCP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+  HAL_GPIO_VCP_STATUS_clr();
+#endif
+
+#if defined(HAL_CONFIG_HAS_PWR_STATUS)
+  /* set alt func */
+  HAL_GPIO_PWR_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+#endif
+
+#endif
+}
+
+void custom_hal_gpio_dap_status_toggle()
+{
+  static int last_value = 0;
+  last_value = ! last_value;
+  if ( last_value) {
+    HAL_GPIO_DAP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+  }else{
+      HAL_GPIO_DAP_STATUS_clr();
+    HAL_GPIO_DAP_STATUS_pmuxdis();
+  }
+}
+void custom_hal_gpio_dap_status_set()
+{
+  HAL_GPIO_DAP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+}
+
+#if defined(HAL_CONFIG_ENABLE_VCP)
+void custom_hal_gpio_vcp_status_toggle()
+{
+  static int last_value = 0;
+  last_value = ! last_value;
+  custom_hal_gpio_vcp_status_write(last_value);
+}
+
+void custom_hal_gpio_vcp_status_write(int val)
+{
+  if ( val ) {
+    HAL_GPIO_VCP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+  }else{
+      HAL_GPIO_VCP_STATUS_clr();
+    HAL_GPIO_VCP_STATUS_pmuxdis();
+  }
+}
+
+#endif
+
+#if defined(HAL_CONFIG_HAS_PWR_STATUS)
+void custom_hal_gpio_pwr_status_set()
+{
+  HAL_GPIO_PWR_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+}
+#endif
+
+#endif
+
+static void custom_init(void)
+{
+#ifdef HAL_CONFIG_CUSTOM_LED
+  led_custom_init();
+#endif
+
+#ifdef DAP_CONFIG_SUPPLY_PWR
+  HAL_GPIO_SUPPLY_PWR_out();
+  HAL_GPIO_SUPPLY_PWR_clr();
+#endif
+
+#ifdef HAL_CONFIG_HAS_PWR_STATUS
+  HAL_GPIO_PWR_STATUS_out();
+#ifdef HAL_CONFIG_CUSTOM_LED
+  custom_hal_gpio_pwr_status_set();
+#else
+  HAL_GPIO_PWR_STATUS_set();
+#endif
+#endif
+}
+
 static void sys_init(void)
 {
   uint32_t coarse, fine;
@@ -395,6 +536,7 @@ static void status_timer_task(void)
 //-----------------------------------------------------------------------------
 int main(void)
 {
+  custom_init();
   sys_init();
   sys_time_init();
   dap_init();
