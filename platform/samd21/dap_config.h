@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
-// Copyright (c) 2024, Alex Taradov <alex@taradov.com>. All rights reserved.
+// Copyright (c) 2017-2022, Alex Taradov <alex@taradov.com>. All rights reserved.
 
 #ifndef _DAP_CONFIG_H_
 #define _DAP_CONFIG_H_
 
 /*- Includes ----------------------------------------------------------------*/
-#include "samd21.h"
+#include "samd11.h"
 #include "hal_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
@@ -34,7 +34,7 @@
 
 // A threshold for switching to fast clock (no added delays)
 // This is the frequency produced by dap_clock_test(1) on the SWCLK pin
-#define DAP_CONFIG_FAST_CLOCK          3600000 // Hz
+#define DAP_CONFIG_FAST_CLOCK          2400000 // Hz
 
 /*- Prototypes --------------------------------------------------------------*/
 extern char usb_serial_number[16];
@@ -82,11 +82,7 @@ static inline void DAP_CONFIG_nTRST_write(int value)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_nRESET_write(int value)
 {
-#ifdef DAP_CONFIG_RST_ACTIVE_HIGH
-  HAL_GPIO_nRESET_write(!value);
-#else
   HAL_GPIO_nRESET_write(value);
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -130,19 +126,7 @@ static inline int DAP_CONFIG_nTRST_read(void)
 //-----------------------------------------------------------------------------
 static inline int DAP_CONFIG_nRESET_read(void)
 {
-#ifdef DAP_CONFIG_HAS_RST_SENSE
-	#ifdef DAP_CONFIG_RST_ACTIVE_HIGH
-  return ! HAL_GPIO_nRESET_SENSE_read();
-	#else
-  return HAL_GPIO_nRESET_SENSE_read();
-	#endif
-#else
-	#ifdef DAP_CONFIG_RST_ACTIVE_HIGH
-  return ! HAL_GPIO_nRESET_read();
-	#else
   return HAL_GPIO_nRESET_read();
-	#endif
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -161,11 +145,17 @@ static inline void DAP_CONFIG_SWCLK_TCK_clr(void)
 static inline void DAP_CONFIG_SWDIO_TMS_in(void)
 {
   HAL_GPIO_SWDIO_TMS_in();
+#ifdef DAP_CONFIG_HAS_TMS_DIR
+  HAL_GPIO_SWDIO_TMS_DIR_clr();
+#endif
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_out(void)
 {
+#ifdef DAP_CONFIG_HAS_TMS_DIR
+  HAL_GPIO_SWDIO_TMS_DIR_set();
+#endif
   HAL_GPIO_SWDIO_TMS_out();
 }
 
@@ -178,13 +168,7 @@ static inline void DAP_CONFIG_SETUP(void)
   HAL_GPIO_SWDIO_TMS_DIR_out();
   HAL_GPIO_SWDIO_TMS_DIR_clr();
 #endif
-#ifdef DAP_CONFIG_HAS_RST_SENSE
-  HAL_GPIO_nRESET_SENSE_in();
-  HAL_GPIO_nRESET_out();
-  DAP_CONFIG_nRESET_write(1);
-#else
   HAL_GPIO_nRESET_in();
-#endif
 #ifdef DAP_CONFIG_ENABLE_JTAG
   HAL_GPIO_TDO_in();
   HAL_GPIO_TDI_in();
@@ -201,13 +185,7 @@ static inline void DAP_CONFIG_DISCONNECT(void)
   HAL_GPIO_SWDIO_TMS_DIR_clr();
 #endif
 
-#ifdef DAP_CONFIG_HAS_RST_SENSE
-  HAL_GPIO_nRESET_SENSE_in();
-  HAL_GPIO_nRESET_out();
-  DAP_CONFIG_nRESET_write(1);
-#else
   HAL_GPIO_nRESET_in();
-#endif
 #ifdef DAP_CONFIG_ENABLE_JTAG
   HAL_GPIO_TDO_in();
   HAL_GPIO_TDI_in();
@@ -217,17 +195,19 @@ static inline void DAP_CONFIG_DISCONNECT(void)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_CONNECT_SWD(void)
 {
+#ifdef DAP_CONFIG_HAS_TMS_DIR
+  HAL_GPIO_SWDIO_TMS_DIR_out();
+  HAL_GPIO_SWDIO_TMS_DIR_set();
+#endif
+
   HAL_GPIO_SWDIO_TMS_out();
   HAL_GPIO_SWDIO_TMS_set();
 
   HAL_GPIO_SWCLK_TCK_out();
   HAL_GPIO_SWCLK_TCK_set();
 
-#ifdef DAP_CONFIG_HAS_RST_SENSE
-  HAL_GPIO_nRESET_SENSE_in();
-#endif
   HAL_GPIO_nRESET_out();
-  DAP_CONFIG_nRESET_write(1);
+  HAL_GPIO_nRESET_set();
 
 #ifdef DAP_CONFIG_ENABLE_JTAG
   HAL_GPIO_TDO_in();
@@ -238,17 +218,19 @@ static inline void DAP_CONFIG_CONNECT_SWD(void)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_CONNECT_JTAG(void)
 {
+#ifdef DAP_CONFIG_HAS_TMS_DIR
+  HAL_GPIO_SWDIO_TMS_DIR_out();
+  HAL_GPIO_SWDIO_TMS_DIR_set();
+#endif
+
   HAL_GPIO_SWDIO_TMS_out();
   HAL_GPIO_SWDIO_TMS_set();
 
   HAL_GPIO_SWCLK_TCK_out();
   HAL_GPIO_SWCLK_TCK_set();
 
-#ifdef DAP_CONFIG_HAS_RST_SENSE
-  HAL_GPIO_nRESET_SENSE_in();
-#endif
   HAL_GPIO_nRESET_out();
-  DAP_CONFIG_nRESET_write(1);
+  HAL_GPIO_nRESET_set();
 
 #ifdef DAP_CONFIG_ENABLE_JTAG
   HAL_GPIO_TDO_in();
