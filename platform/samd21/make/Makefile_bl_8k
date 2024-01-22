@@ -1,6 +1,6 @@
 ##############################################################################
 BUILD = build
-BIN = free_dap_d21_nobl
+BIN = free_dap_d21_jeffprobe_bl
 
 ##############################################################################
 .PHONY: all directory clean size
@@ -15,6 +15,7 @@ else
   MKDIR = mkdir
 endif
 
+CFLAGS += -DHAL_BOARD_JEFF_PROBE
 CFLAGS += -W -Wall --std=gnu11 -Os
 CFLAGS += -fno-diagnostics-show-caret
 CFLAGS += -fdata-sections -ffunction-sections
