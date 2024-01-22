@@ -9,7 +9,7 @@
 #include "hal_gpio.h"
 
 /*- Definitions -------------------------------------------------------------*/
-#define HAL_BOARD_GENERIC
+//#define HAL_BOARD_GENERIC
 
 #if defined(HAL_BOARD_CUSTOM)
   // Externally supplied board configuration takes precedence
@@ -44,7 +44,7 @@
 #elif defined(HAL_BOARD_JEFF_PROBE)
   #define HAL_CONFIG_ENABLE_VCP
   #define HAL_CONFIG_HAS_PWR_STATUS
-  #define HAL_CONFIG_CUSTOM_LED
+  #define HAL_CONFIG_PWM_LED
   #define DAP_CONFIG_SUPPLY_PWR
   #define DAP_CONFIG_ENABLE_JTAG
   #define DAP_CONFIG_HAS_TMS_DIR
@@ -60,13 +60,25 @@
   HAL_GPIO_PIN(nRESET_SENSE,       A, 9)
   HAL_GPIO_PIN(SUPPLY_PWR,         A, 28);
 
+  HAL_GPIO_PIN(UART_TX,            A, 4);
+  HAL_GPIO_PIN(UART_RX,            A, 7);
+
   HAL_GPIO_PIN(VCP_STATUS,         A, 10);
   HAL_GPIO_PIN(DAP_STATUS,         A, 11);
   HAL_GPIO_PIN(PWR_STATUS,         A, 14);
   HAL_GPIO_PIN(BUTTON,             A, 27);
 
-  HAL_GPIO_PIN(UART_TX,            A, 4);
-  HAL_GPIO_PIN(UART_RX,            A, 7);
+  /* PA10/WO[2], PA11/WO[3], PA14/WO[4] */
+  // CC0 used by Power LED
+  #define POWER_LED_CC_CH		0
+  // CC2 used by VCP
+  #define VCP_STATUS_CC_CH		2
+  // CC3 used by DAP
+  #define DAP_STATUS_CC_CH		3
+
+  #define HAL_CONFIG_ADC_PWRSENSE
+  HAL_GPIO_PIN(ADC_PWRSENSE,          A, 2)
+  HAL_GPIO_PIN(ADC_VREF,              A, 3)
 
   #define UART_SERCOM              SERCOM0
   #define UART_SERCOM_PMUX         PORT_PMUX_PMUXE_D_Val

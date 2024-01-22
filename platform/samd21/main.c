@@ -16,9 +16,10 @@
 #include "dap_config.h"
 
 /*- Definitions -------------------------------------------------------------*/
-#define USB_BUFFER_SIZE        64
-#define UART_WAIT_TIMEOUT      10 // ms
-#define STATUS_TIMEOUT         250 // ms
+#define USB_BUFFER_SIZE		64
+#define UART_WAIT_TIMEOUT	10	// ms
+#define STATUS_TIMEOUT		250	// ms
+#define ADC_SAMPLE_INTERVAL	1000	// ms
 
 /*- Variables ---------------------------------------------------------------*/
 static alignas(4) uint8_t app_req_buf_hid[DAP_CONFIG_PACKET_SIZE];
@@ -46,12 +47,13 @@ static bool app_vcp_event = false;
 static bool app_vcp_open = false;
 #endif
 
-#ifdef HAL_CONFIG_CUSTOM_LED
+#ifdef HAL_CONFIG_PWM_LED
 
 // based upon 3MHz for TCC
-#define LED_PWM_PERIOD    3000
+#define PWM_LED_PERIOD    2000
 // percentage of LED brigtness, 100 = Full brightness
-#define LED_BRIGHTNESS	  12.5
+#define LED_BRIGHTNESS	  100
+
 
 extern void custom_hal_gpio_dap_status_toggle();
 extern void custom_hal_gpio_dap_status_set();
@@ -65,26 +67,144 @@ extern void custom_hal_gpio_vcp_status_write(int val);
 /*- Implementations ---------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
-#ifdef HAL_CONFIG_CUSTOM_LED
+#ifdef HAL_CONFIG_ADC_PWRSENSE
+static void adc_init(void)
+{
+  /* Enable the APB clock for the ADC. */
+  PM->APBCMASK.reg |= PM_APBCMASK_ADC;
+
+  /* Enable GCLK1 for the ADC */
+  GCLK->CLKCTRL.reg = GCLK_CLKCTRL_CLKEN |
+                    GCLK_CLKCTRL_GEN(1) |
+                    GCLK_CLKCTRL_ID_ADC;
+
+  /* Wait for bus synchronization. */
+  while (GCLK->STATUS.bit.SYNCBUSY) {};
+
+  /* read caliberation data */
+  uint32_t bias = (*((uint32_t *) ADC_FUSES_BIASCAL_ADDR) & ADC_FUSES_BIASCAL_Msk) >> ADC_FUSES_BIASCAL_Pos;
+  uint32_t linearity = (*((uint32_t *) ADC_FUSES_LINEARITY_0_ADDR) & ADC_FUSES_LINEARITY_0_Msk) >> ADC_FUSES_LINEARITY_0_Pos;
+  linearity |= ((*((uint32_t *) ADC_FUSES_LINEARITY_1_ADDR) & ADC_FUSES_LINEARITY_1_Msk) >> ADC_FUSES_LINEARITY_1_Pos) << 5;
+
+  /* Wait for bus synchronization. */
+  while (ADC->STATUS.bit.SYNCBUSY) {};
+
+  /* Write the calibration data. */
+  ADC->CALIB.reg = ADC_CALIB_BIAS_CAL(bias) | ADC_CALIB_LINEARITY_CAL(linearity);
+  /* Wait for bus synchronization. */
+  while (ADC->STATUS.bit.SYNCBUSY) {};
+
+  /* Use the internal VCC reference. This is 1/2 of what's on VCCA.
+     since VCCA is typically 3.3v, this is 1.65v.
+  */
+  ADC->REFCTRL.reg = ADC_REFCTRL_REFSEL_INTVCC1;
+
+  /* Only capture four samples for better accuracy,
+  */
+  ADC->AVGCTRL.reg = ADC_AVGCTRL_SAMPLENUM_8;
+
+  /* Set the clock prescaler to 128, which will run the ADC at
+     8 Mhz / 128 = 62.5 kHz.
+     Set the resolution to 16bit.
+  */
+  ADC->CTRLB.reg = ADC_CTRLB_PRESCALER_DIV128 |
+                 ADC_CTRLB_RESSEL_16BIT;
+
+  /* Configure the input parameters.
+
+   - GAIN_DIV2 means that the input voltage is halved. This is important
+     because the voltage reference is 1/2 of VCCA. So if you want to
+     measure 0-3.3v, you need to halve the input as well.
+
+   - MUXNEG_GND means that the ADC should compare the input value to GND.
+
+   - MUXPOST_PIN0 means that the ADC should read from AIN0, or PA02.
+  */
+  ADC->INPUTCTRL.reg = ADC_INPUTCTRL_GAIN_DIV2 |
+                     ADC_INPUTCTRL_MUXNEG_GND |
+                     ADC_INPUTCTRL_MUXPOS_PIN0;
+
+  HAL_GPIO_ADC_PWRSENSE_in();
+  HAL_GPIO_ADC_PWRSENSE_pmuxen( HAL_GPIO_PMUX_B );
+  HAL_GPIO_ADC_VREF_in();
+  HAL_GPIO_ADC_VREF_pmuxen( HAL_GPIO_PMUX_B );
+
+  /* Wait for bus synchronization. */
+  while (ADC->STATUS.bit.SYNCBUSY) {};
+
+  /* Enable the ADC. */
+  ADC->CTRLA.bit.ENABLE = true;
+}
+
+static void adc_task(void)
+{
+  static uint8_t message[16];
+  enum adc_state { adc_state_idle, adc_state_sync, adc_state_sample };
+  static enum adc_state adc_st = adc_state_idle;
+  static uint64_t next_sample_time = ADC_SAMPLE_INTERVAL;
+  if ( app_system_time < next_sample_time ) return;
+
+  switch (adc_st ){
+    case adc_state_idle:
+    case adc_state_sync:
+      if ( ! ADC->STATUS.bit.SYNCBUSY ) {
+        /* Start the ADC using a software trigger. */
+        ADC->SWTRIG.bit.START = true;
+        adc_st = adc_state_sample;
+      }else{
+        adc_st = adc_state_sync;
+      }
+      break;
+    case (adc_state_sample ):
+      /* check if the result is ready */
+      if (ADC->INTFLAG.bit.RESRDY ) {
+        /* Clear the flag. */
+        ADC->INTFLAG.reg = ADC_INTFLAG_RESRDY;
+        /* Read the value. */
+        uint32_t result = ADC->RESULT.reg;
+        adc_st = adc_state_idle;
+        next_sample_time = app_system_time + ADC_SAMPLE_INTERVAL;
+	message[0] = 'V';
+	message[1] = '=';
+        for (int i = 0; i < 8; i++){
+          message[9-i] = "0123456789ABCDEF"[result & 0xf];
+	  result >>= 4;
+        }
+        message[10] = ' ';
+        message[11] = ' ';
+        message[12] = 10;
+        usb_cdc_send(message,13);
+      }
+      break;
+    default:
+      // should not be here
+        adc_st = adc_state_idle;
+        next_sample_time = app_system_time + ADC_SAMPLE_INTERVAL;
+     break;
+  }
+}
+
+#endif
+
+#ifdef HAL_CONFIG_PWM_LED
 static void led_custom_init()
 {
-#ifdef HAL_BOARD_JEFF_PROBE
   /* Enable the APB clock for TCC0 */
   PM->APBCMASK.reg |= PM_APBCMASK_TCC0;
   /* Enable GCLK1 and wire it up to TCC0 and TCC1. */
   GCLK->CLKCTRL.reg = GCLK_CLKCTRL_CLKEN |GCLK_CLKCTRL_ID_TCC0_TCC1 |
-                    GCLK_CLKCTRL_GEN(0);
+                    GCLK_CLKCTRL_GEN(1);
   /* Wait until the clock bus is synchronized. */
   while (GCLK->STATUS.bit.SYNCBUSY) {};
 
   /* Configure the clock prescaler for each TCC.
      This lets you divide up the clocks frequency to make the TCC count slower
-     than the clock. In this case, I'm dividing the 48MHz clock by 16 making the
-     TCC operate at 3MHz. This means each count (or "tick") is 0.33us.
+     than the clock. In this case, 8MHz clock by 4 making the
+     TCC operate at 2MHz. This means each count (or "tick") is 0.5us.
   */
   TCC0->CTRLA.reg |= TCC_CTRLA_PRESCALER(TCC_CTRLA_PRESCALER_DIV16_Val);
 
-  TCC0->PER.reg = LED_PWM_PERIOD;
+  TCC0->PER.reg = PWM_LED_PERIOD;
   while (TCC0->SYNCBUSY.bit.PER) {};
 
   /* Use "Normal PWM" */
@@ -95,19 +215,16 @@ static void led_custom_init()
   /* n for CC[n] is determined by n = x % 4 where x is from WO[x]
    WO[x] comes from the peripheral multiplexer - we'll get to that in a second.
   */
-  // CC3 used by DAP
-  TCC0->CC[3].reg = LED_PWM_PERIOD * LED_BRIGHTNESS /100;
+  TCC0->CC[DAP_STATUS_CC_CH].reg = LED_BRIGHTNESS ;
   while (TCC0->SYNCBUSY.bit.CC3) {};
 
-  // CC2 used by VCP
 #if defined(HAL_CONFIG_ENABLE_VCP)
-  TCC0->CC[2].reg = LED_PWM_PERIOD * LED_BRIGHTNESS /100 ;
+  TCC0->CC[VCP_STATUS_CC_CH].reg = LED_BRIGHTNESS ;
   while (TCC0->SYNCBUSY.bit.CC2) {};
 #endif
 
-  // CC0 used by Power LED
 #if defined(HAL_CONFIG_HAS_PWR_STATUS)
-  TCC0->CC[0].reg = LED_PWM_PERIOD * LED_BRIGHTNESS /100 ;
+  TCC0->CC[POWER_LED_CC_CH].reg = LED_BRIGHTNESS ;
   while (TCC0->SYNCBUSY.bit.CC0) {};
 #endif
 
@@ -119,32 +236,29 @@ static void led_custom_init()
 
 #if defined(HAL_CONFIG_ENABLE_VCP)
   /* set alt func */
-  HAL_GPIO_VCP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+  HAL_GPIO_VCP_STATUS_out();
   HAL_GPIO_VCP_STATUS_clr();
+  HAL_GPIO_VCP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
 #endif
 
 #if defined(HAL_CONFIG_HAS_PWR_STATUS)
   /* set alt func */
+  HAL_GPIO_PWR_STATUS_out();
+  HAL_GPIO_PWR_STATUS_clr();
   HAL_GPIO_PWR_STATUS_pmuxen( HAL_GPIO_PMUX_F );
 #endif
 
-#endif
 }
 
 void custom_hal_gpio_dap_status_toggle()
 {
   static int last_value = 0;
   last_value = ! last_value;
-  if ( last_value) {
-    HAL_GPIO_DAP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
-  }else{
-      HAL_GPIO_DAP_STATUS_clr();
-    HAL_GPIO_DAP_STATUS_pmuxdis();
-  }
+  TCC0->CC[DAP_STATUS_CC_CH].reg = last_value ? LED_BRIGHTNESS : 0 ;
 }
 void custom_hal_gpio_dap_status_set()
 {
-  HAL_GPIO_DAP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+  TCC0->CC[DAP_STATUS_CC_CH].reg = LED_BRIGHTNESS ;
 }
 
 #if defined(HAL_CONFIG_ENABLE_VCP)
@@ -157,12 +271,7 @@ void custom_hal_gpio_vcp_status_toggle()
 
 void custom_hal_gpio_vcp_status_write(int val)
 {
-  if ( val ) {
-    HAL_GPIO_VCP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
-  }else{
-      HAL_GPIO_VCP_STATUS_clr();
-    HAL_GPIO_VCP_STATUS_pmuxdis();
-  }
+  TCC0->CC[VCP_STATUS_CC_CH].reg = val ? LED_BRIGHTNESS : 0 ;
 }
 
 #endif
@@ -170,7 +279,7 @@ void custom_hal_gpio_vcp_status_write(int val)
 #if defined(HAL_CONFIG_HAS_PWR_STATUS)
 void custom_hal_gpio_pwr_status_set()
 {
-  HAL_GPIO_PWR_STATUS_pmuxen( HAL_GPIO_PMUX_F );
+  TCC0->CC[POWER_LED_CC_CH].reg = LED_BRIGHTNESS ;
 }
 #endif
 
@@ -178,30 +287,32 @@ void custom_hal_gpio_pwr_status_set()
 
 static void custom_init(void)
 {
-#ifdef HAL_CONFIG_CUSTOM_LED
+#ifdef HAL_CONFIG_PWM_LED
   led_custom_init();
 #endif
 
 #ifdef DAP_CONFIG_SUPPLY_PWR
   HAL_GPIO_SUPPLY_PWR_out();
-  HAL_GPIO_SUPPLY_PWR_clr();
+  HAL_GPIO_SUPPLY_PWR_set();
 #endif
 
 #ifdef HAL_CONFIG_HAS_PWR_STATUS
   HAL_GPIO_PWR_STATUS_out();
-#ifdef HAL_CONFIG_CUSTOM_LED
+#ifdef HAL_CONFIG_PWM_LED
   custom_hal_gpio_pwr_status_set();
 #else
   HAL_GPIO_PWR_STATUS_set();
 #endif
+#endif
+
+#ifdef HAL_CONFIG_ADC_PWRSENSE
+  adc_init();
 #endif
 }
 
 static void sys_init(void)
 {
   uint32_t coarse, fine;
-
-  custom_init();
 
   NVMCTRL->CTRLB.reg = NVMCTRL_CTRLB_RWS(1);
 
@@ -225,6 +336,20 @@ static void sys_init(void)
   GCLK->GENCTRL.reg = GCLK_GENCTRL_ID(0) | GCLK_GENCTRL_SRC(GCLK_SOURCE_DFLL48M) |
       GCLK_GENCTRL_RUNSTDBY | GCLK_GENCTRL_GENEN;
   while (GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
+
+#if (defined (HAL_CONFIG_PWM_LED) || defined (HAL_CONFIG_ADC_PWRSENSE))
+  // enable GCLK1 for peripherals, base clock is 8MHz same as OSC8M but has
+  // better accuracy when USB connected
+  GCLK->GENCTRL.reg = GCLK_GENCTRL_ID(1) | GCLK_GENCTRL_SRC(GCLK_SOURCE_DFLL48M) |
+      GCLK_GENCTRL_RUNSTDBY | GCLK_GENCTRL_GENEN;
+  while (GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
+  GCLK->GENDIV.reg = GCLK_GENDIV_ID(1) | GCLK_GENDIV_DIV(6);
+  while (GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
+
+  custom_init();
+
+#endif
+
 }
 
 //-----------------------------------------------------------------------------
@@ -503,13 +628,13 @@ static void status_timer_task(void)
   app_status_timeout = app_system_time + STATUS_TIMEOUT;
 
   if (app_dap_event)
-#ifdef HAL_CONFIG_CUSTOM_LED
+#ifdef HAL_CONFIG_PWM_LED
     custom_hal_gpio_dap_status_toggle();
 #else
     HAL_GPIO_DAP_STATUS_toggle();
 #endif
   else
-#ifdef HAL_CONFIG_CUSTOM_LED
+#ifdef HAL_CONFIG_PWM_LED
     custom_hal_gpio_dap_status_set();
 #else
     HAL_GPIO_DAP_STATUS_set();
@@ -519,13 +644,13 @@ static void status_timer_task(void)
 
 #ifdef HAL_CONFIG_ENABLE_VCP
   if (app_vcp_event)
-#ifdef HAL_CONFIG_CUSTOM_LED
+#ifdef HAL_CONFIG_PWM_LED
     custom_hal_gpio_vcp_status_toggle();
 #else
     HAL_GPIO_VCP_STATUS_toggle();
 #endif
   else
-#ifdef HAL_CONFIG_CUSTOM_LED
+#ifdef HAL_CONFIG_PWM_LED
     custom_hal_gpio_vcp_status_write(app_vcp_open);
 #else
     HAL_GPIO_VCP_STATUS_write(app_vcp_open);
@@ -565,6 +690,9 @@ int main(void)
   {
     sys_time_task();
     status_timer_task();
+#ifdef HAL_CONFIG_ADC_PWRSENSE
+    adc_task();
+#endif
     usb_task();
     dap_task();
 
