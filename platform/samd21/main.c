@@ -19,7 +19,8 @@
 #define USB_BUFFER_SIZE		64
 #define UART_WAIT_TIMEOUT	10	// ms
 #define STATUS_TIMEOUT		250	// ms
-#define ADC_SAMPLE_INTERVAL	1000	// ms
+#define ADC_SAMPLE_INTERVAL	500	// ms
+#define POWER_DETECT_THRESHOLD	7432	// 1.1V
 
 /*- Variables ---------------------------------------------------------------*/
 static alignas(4) uint8_t app_req_buf_hid[DAP_CONFIG_PACKET_SIZE];
@@ -138,10 +139,14 @@ static void adc_init(void)
 
 static void adc_task(void)
 {
-  static uint8_t message[16];
+#if defined(ADC_DEBUG)
+  static alignas(4) uint8_t  message[16];
+#endif
   enum adc_state { adc_state_idle, adc_state_sync, adc_state_sample };
   static enum adc_state adc_st = adc_state_idle;
   static uint64_t next_sample_time = ADC_SAMPLE_INTERVAL;
+  static bool pwr_led_toggle = false;
+
   if ( app_system_time < next_sample_time ) return;
 
   switch (adc_st ){
@@ -160,10 +165,13 @@ static void adc_task(void)
       if (ADC->INTFLAG.bit.RESRDY ) {
         /* Clear the flag. */
         ADC->INTFLAG.reg = ADC_INTFLAG_RESRDY;
-        /* Read the value. */
+        /* Read the value: voltage in uV = result*148  */
+	/* Due to onboard resistor dividor 100/147 */
+	/* (4095*8) = 3.3V */
         uint32_t result = ADC->RESULT.reg;
         adc_st = adc_state_idle;
         next_sample_time = app_system_time + ADC_SAMPLE_INTERVAL;
+#if defined(ADC_DEBUG)
 	message[0] = 'V';
 	message[1] = '=';
         for (int i = 0; i < 8; i++){
@@ -174,6 +182,24 @@ static void adc_task(void)
         message[11] = ' ';
         message[12] = 10;
         usb_cdc_send(message,13);
+#endif
+	bool pwr_led_on = false;
+	if ( result > POWER_DETECT_THRESHOLD ){
+          // power detected
+	  if ( HAL_GPIO_SUPPLY_PWR_read() ) {
+             // probe doesn't provide power interface
+	     // blinking LED
+	     pwr_led_on = pwr_led_toggle;
+             pwr_led_toggle = ! pwr_led_toggle;
+	  }else{
+             // probe provides power supply, turn on LED
+             pwr_led_on = true;
+	  }
+	}
+#if defined(HAL_CONFIG_HAS_PWR_LED)
+        TCC0->CC[POWER_LED_CC_CH].reg = pwr_led_on ? LED_BRIGHTNESS : 0 ;
+#endif
+
       }
       break;
     default:
@@ -223,7 +249,7 @@ static void led_custom_init()
   while (TCC0->SYNCBUSY.bit.CC2) {};
 #endif
 
-#if defined(HAL_CONFIG_HAS_PWR_STATUS)
+#if defined(HAL_CONFIG_HAS_PWR_LED)
   TCC0->CC[POWER_LED_CC_CH].reg = LED_BRIGHTNESS ;
   while (TCC0->SYNCBUSY.bit.CC0) {};
 #endif
@@ -241,7 +267,7 @@ static void led_custom_init()
   HAL_GPIO_VCP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
 #endif
 
-#if defined(HAL_CONFIG_HAS_PWR_STATUS)
+#if defined(HAL_CONFIG_HAS_PWR_LED)
   /* set alt func */
   HAL_GPIO_PWR_STATUS_out();
   HAL_GPIO_PWR_STATUS_clr();
@@ -276,7 +302,7 @@ void custom_hal_gpio_vcp_status_write(int val)
 
 #endif
 
-#if defined(HAL_CONFIG_HAS_PWR_STATUS)
+#if defined(HAL_CONFIG_HAS_PWR_LED)
 void custom_hal_gpio_pwr_status_set()
 {
   TCC0->CC[POWER_LED_CC_CH].reg = LED_BRIGHTNESS ;
@@ -296,7 +322,7 @@ static void custom_init(void)
   HAL_GPIO_SUPPLY_PWR_set();
 #endif
 
-#ifdef HAL_CONFIG_HAS_PWR_STATUS
+#ifdef HAL_CONFIG_HAS_PWR_LED
   HAL_GPIO_PWR_STATUS_out();
 #ifdef HAL_CONFIG_PWM_LED
   custom_hal_gpio_pwr_status_set();
