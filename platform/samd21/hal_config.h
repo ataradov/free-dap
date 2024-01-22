@@ -63,7 +63,7 @@
   HAL_GPIO_PIN(VCP_STATUS,         A, 10);
   HAL_GPIO_PIN(DAP_STATUS,         A, 11);
   HAL_GPIO_PIN(PWR_STATUS,         A, 14);
-  HAL_GPIO_PIN(BOOT_ENTER,         A, 31);
+  HAL_GPIO_PIN(BUTTON,             A, 27);
 
   HAL_GPIO_PIN(UART_TX,            A, 4);
   HAL_GPIO_PIN(UART_RX,            A, 7);

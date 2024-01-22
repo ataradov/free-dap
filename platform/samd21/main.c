@@ -201,6 +201,8 @@ static void sys_init(void)
 {
   uint32_t coarse, fine;
 
+  custom_init();
+
   NVMCTRL->CTRLB.reg = NVMCTRL_CTRLB_RWS(1);
 
   SYSCTRL->INTFLAG.reg = SYSCTRL_INTFLAG_BOD33RDY | SYSCTRL_INTFLAG_BOD33DET |
@@ -536,7 +538,6 @@ static void status_timer_task(void)
 //-----------------------------------------------------------------------------
 int main(void)
 {
-  custom_init();
   sys_init();
   sys_time_init();
   dap_init();
@@ -557,8 +558,8 @@ int main(void)
   HAL_GPIO_DAP_STATUS_out();
   HAL_GPIO_DAP_STATUS_set();
 
-  HAL_GPIO_BOOT_ENTER_in();
-  HAL_GPIO_BOOT_ENTER_pullup();
+  HAL_GPIO_BUTTON_in();
+//  HAL_GPIO_BUTTON_pullup(); Jeff Probe has an external pullup
 
   while (1)
   {
@@ -574,8 +575,8 @@ int main(void)
     uart_timer_task();
 #endif
 
-    if (0 == HAL_GPIO_BOOT_ENTER_read())
-      NVIC_SystemReset();
+//    if (0 == HAL_GPIO_BOOT_ENTER_read())
+//      NVIC_SystemReset();
   }
 
   return 0;
