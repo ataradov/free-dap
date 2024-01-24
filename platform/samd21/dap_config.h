@@ -145,7 +145,7 @@ static inline void DAP_CONFIG_SWCLK_TCK_clr(void)
 static inline void DAP_CONFIG_SWDIO_TMS_in(void)
 {
   HAL_GPIO_SWDIO_TMS_in();
-#ifdef DAP_CONFIG_HAS_TMS_DIR
+#ifdef DAP_CONFIG_ENABLE_TMS_DIR
   HAL_GPIO_SWDIO_TMS_DIR_clr();
 #endif
 }
@@ -153,7 +153,7 @@ static inline void DAP_CONFIG_SWDIO_TMS_in(void)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_out(void)
 {
-#ifdef DAP_CONFIG_HAS_TMS_DIR
+#ifdef DAP_CONFIG_ENABLE_TMS_DIR
   HAL_GPIO_SWDIO_TMS_DIR_set();
 #endif
   HAL_GPIO_SWDIO_TMS_out();
@@ -164,7 +164,7 @@ static inline void DAP_CONFIG_SETUP(void)
 {
   HAL_GPIO_SWCLK_TCK_in();
   HAL_GPIO_SWDIO_TMS_in();
-#ifdef DAP_CONFIG_HAS_TMS_DIR
+#ifdef DAP_CONFIG_ENABLE_TMS_DIR
   HAL_GPIO_SWDIO_TMS_DIR_out();
   HAL_GPIO_SWDIO_TMS_DIR_clr();
 #endif
@@ -180,7 +180,7 @@ static inline void DAP_CONFIG_DISCONNECT(void)
 {
   HAL_GPIO_SWCLK_TCK_in();
   HAL_GPIO_SWDIO_TMS_in();
-#ifdef DAP_CONFIG_HAS_TMS_DIR
+#ifdef DAP_CONFIG_ENABLE_TMS_DIR
   HAL_GPIO_SWDIO_TMS_DIR_out();
   HAL_GPIO_SWDIO_TMS_DIR_clr();
 #endif
@@ -195,7 +195,7 @@ static inline void DAP_CONFIG_DISCONNECT(void)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_CONNECT_SWD(void)
 {
-#ifdef DAP_CONFIG_HAS_TMS_DIR
+#ifdef DAP_CONFIG_ENABLE_TMS_DIR
   HAL_GPIO_SWDIO_TMS_DIR_out();
   HAL_GPIO_SWDIO_TMS_DIR_set();
 #endif
@@ -218,7 +218,7 @@ static inline void DAP_CONFIG_CONNECT_SWD(void)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_CONNECT_JTAG(void)
 {
-#ifdef DAP_CONFIG_HAS_TMS_DIR
+#ifdef DAP_CONFIG_ENABLE_TMS_DIR
   HAL_GPIO_SWDIO_TMS_DIR_out();
   HAL_GPIO_SWDIO_TMS_DIR_set();
 #endif

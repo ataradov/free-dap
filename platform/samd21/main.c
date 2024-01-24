@@ -48,12 +48,12 @@ static bool app_vcp_event = false;
 static bool app_vcp_open = false;
 #endif
 
-#ifdef HAL_CONFIG_PWM_LED
+#ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
 
 // based upon 3MHz for TCC
 #define PWM_LED_PERIOD    2000
-// percentage of LED brigtness, 100 = Full brightness
-#define LED_BRIGHTNESS	  100
+// percentage of LED brigtness, 100 = Full brightness, current set to 5%
+#define LED_BRIGHTNESS	  (5 * PWM_LED_PERIOD/100)
 
 
 extern void custom_hal_gpio_dap_status_toggle();
@@ -65,9 +65,199 @@ extern void custom_hal_gpio_vcp_status_write(int val);
 #endif
 #endif
 
+#ifdef HAL_CONFIG_ENABLE_BUTTON
+// debounce set to 10ms
+#define	BUTTON_DEBOUNCE_TIME	10
+#define BUTTON_CLICK_MIN	40
+#define BUTTON_CLICK_MAX	250
+#define BUTTON_HOLD_MIN 	700
+enum button_mode {button_idle, button_click, button_doubletap, button_tripletap, button_hold, button_tap_hold, button_doubletap_hold};
+static enum button_mode button_state = button_idle;
+#endif
+
+//#define BUTTON_DEBUG
+//#define ADC_DEBUG
+
 /*- Implementations ---------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
+#ifdef HAL_CONFIG_ENABLE_BUTTON
+static void button_task(void)
+{
+  enum key_proc_state { key_proc_idle, key_proc_engaged, key_proc_wait_rel};
+  static enum key_proc_state key_state;
+
+#ifdef BUTTON_DEBUG
+  static alignas(4) uint8_t  message[14]={'B',':',0,0,0,0,0,0,0,0,',',0,'\n',0};
+#endif
+  // assuming button has pullup
+  static bool last_lvl = true;
+  static uint32_t last_time = 0;
+  static bool glitch_lvl = true;
+  static uint32_t glitch_time = 0;
+  static bool glitch_start = false;
+  static uint8_t  click_cnt = 0;
+
+  bool lvl = HAL_GPIO_BUTTON_read();
+  uint32_t cur_time = app_system_time;
+  uint32_t delta ;
+  bool changed ;
+
+  delta = cur_time - glitch_time;
+  changed = lvl != glitch_lvl;
+  if ( changed ) {
+    glitch_time = cur_time;
+    glitch_lvl = lvl;
+  }
+
+  if ( glitch_start && (delta < BUTTON_DEBOUNCE_TIME )) return;
+
+  if ( changed && (!glitch_start)) {
+    glitch_start = true;
+    return;
+  }
+  // passed glitch filtering
+  glitch_start = false;
+
+  changed = lvl != last_lvl;
+  delta = cur_time - last_time;
+
+  if ( changed ) {
+    //button toggled
+    last_time = cur_time;
+    last_lvl = lvl;
+    if ( key_state == key_proc_idle ) {
+      key_state = key_proc_engaged;
+      click_cnt = 0;
+      return;
+    }
+    if ( key_state == key_proc_wait_rel) {
+      key_state = key_proc_idle;
+      click_cnt = 0;
+      return;
+    }
+    // process in progress
+    if ( lvl ) {
+      // button release
+      if ( (delta < BUTTON_CLICK_MIN) || (delta > BUTTON_CLICK_MAX) ) {
+        // press is too short or too long, terminate current click counting
+        key_state = key_proc_idle;
+        // if not too short, register the click
+        if ( delta > BUTTON_CLICK_MAX) click_cnt ++;
+        switch ( click_cnt ) {
+          case 0:
+            return;
+            break;
+          case 1:
+            button_state = button_click;
+            break;
+          case 2:
+            button_state = button_doubletap;
+            break;
+          default:
+            button_state = button_tripletap;
+            break;
+        }
+      }else {
+        click_cnt ++;
+        return;
+      }
+    }else {
+      // button press
+      if ( delta < BUTTON_CLICK_MAX ) return;
+      switch ( click_cnt ) {
+        case 0:
+          return;
+          break;
+        case 1:
+          button_state = button_click;
+          break;
+        case 2:
+          button_state = button_doubletap;
+          break;
+        default:
+          button_state = button_tripletap;
+          break;
+      }
+      click_cnt = 0;
+    }
+  }else if ( key_state == key_proc_engaged ){
+    // button not change
+    if ( delta <  BUTTON_CLICK_MIN) {
+      // wait is too short, ignore
+      return;
+    }
+    if ( lvl ) {
+      // button has release long enough
+      if (delta > BUTTON_CLICK_MAX ) {
+        // button release long enough
+        switch ( click_cnt ) {
+        case 0:
+          break;
+        case 1:
+          button_state = button_click;
+          break;
+        break;
+        case 2:
+          button_state = button_doubletap;
+          break;
+        default:
+          button_state = button_tripletap;
+          break;
+        }
+        click_cnt = 0;
+        key_state = key_proc_idle;
+      } else {
+        // still waiting for press again
+        return;
+      }
+    } else {
+      if ( delta > BUTTON_HOLD_MIN ) {
+        switch ( click_cnt ) {
+          case 0:
+            button_state = button_hold;
+            break;
+          case 1:
+            button_state = button_tap_hold;
+            break;
+          default:
+            button_state = button_doubletap_hold;
+            break;
+        }
+        click_cnt = 0;
+        key_state = key_proc_wait_rel;
+      }else{
+        // still waiting
+        return;
+      }
+    }
+  }
+
+  // processing button click
+  if ( button_state != button_idle ) {
+#ifdef BUTTON_DEBUG
+    for (int i = 0; i < 2; i++){
+      message[3-i] = "0123456789ABCDEF"[button_state& 0xf];
+      button_state >>= 4;
+    }
+    message[4] = '\n';
+    usb_cdc_send(message,5);
+#endif
+    switch (button_state ) {
+      case button_click:
+        HAL_GPIO_EXT_PWR_toggle();
+        break;
+      case button_doubletap_hold:
+        NVIC_SystemReset();
+	break;
+      default:
+        break;
+    }
+    button_state = button_idle;
+  }
+}
+#endif
+
 #ifdef HAL_CONFIG_ADC_PWRSENSE
 static void adc_init(void)
 {
@@ -139,8 +329,8 @@ static void adc_init(void)
 
 static void adc_task(void)
 {
-#if defined(ADC_DEBUG)
-  static alignas(4) uint8_t  message[16];
+#ifdef ADC_DEBUG
+  static alignas(4) uint8_t  message[12] = {'V','=', 0,0,0,0,0,0,0,0, '\n',0};
 #endif
   enum adc_state { adc_state_idle, adc_state_sync, adc_state_sample };
   static enum adc_state adc_st = adc_state_idle;
@@ -171,22 +361,17 @@ static void adc_task(void)
         uint32_t result = ADC->RESULT.reg;
         adc_st = adc_state_idle;
         next_sample_time = app_system_time + ADC_SAMPLE_INTERVAL;
-#if defined(ADC_DEBUG)
-	message[0] = 'V';
-	message[1] = '=';
+#ifdef ADC_DEBUG
         for (int i = 0; i < 8; i++){
           message[9-i] = "0123456789ABCDEF"[result & 0xf];
 	  result >>= 4;
         }
-        message[10] = ' ';
-        message[11] = ' ';
-        message[12] = 10;
-        usb_cdc_send(message,13);
+        usb_cdc_send(message,11);
 #endif
 	bool pwr_led_on = false;
 	if ( result > POWER_DETECT_THRESHOLD ){
           // power detected
-	  if ( HAL_GPIO_SUPPLY_PWR_read() ) {
+	  if ( HAL_GPIO_EXT_PWR_read() ) {
              // probe doesn't provide power interface
 	     // blinking LED
 	     pwr_led_on = pwr_led_toggle;
@@ -196,7 +381,7 @@ static void adc_task(void)
              pwr_led_on = true;
 	  }
 	}
-#if defined(HAL_CONFIG_HAS_PWR_LED)
+#ifdef HAL_CONFIG_ENABLE_PWR_LED
         TCC0->CC[POWER_LED_CC_CH].reg = pwr_led_on ? LED_BRIGHTNESS : 0 ;
 #endif
 
@@ -212,7 +397,7 @@ static void adc_task(void)
 
 #endif
 
-#ifdef HAL_CONFIG_PWM_LED
+#ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
 static void led_custom_init()
 {
   /* Enable the APB clock for TCC0 */
@@ -244,12 +429,12 @@ static void led_custom_init()
   TCC0->CC[DAP_STATUS_CC_CH].reg = LED_BRIGHTNESS ;
   while (TCC0->SYNCBUSY.bit.CC3) {};
 
-#if defined(HAL_CONFIG_ENABLE_VCP)
+#ifdef HAL_CONFIG_ENABLE_VCP
   TCC0->CC[VCP_STATUS_CC_CH].reg = LED_BRIGHTNESS ;
   while (TCC0->SYNCBUSY.bit.CC2) {};
 #endif
 
-#if defined(HAL_CONFIG_HAS_PWR_LED)
+#ifdef HAL_CONFIG_ENABLE_PWR_LED
   TCC0->CC[POWER_LED_CC_CH].reg = LED_BRIGHTNESS ;
   while (TCC0->SYNCBUSY.bit.CC0) {};
 #endif
@@ -260,14 +445,14 @@ static void led_custom_init()
   HAL_GPIO_DAP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
   HAL_GPIO_DAP_STATUS_clr();
 
-#if defined(HAL_CONFIG_ENABLE_VCP)
+#ifdef HAL_CONFIG_ENABLE_VCP
   /* set alt func */
   HAL_GPIO_VCP_STATUS_out();
   HAL_GPIO_VCP_STATUS_clr();
   HAL_GPIO_VCP_STATUS_pmuxen( HAL_GPIO_PMUX_F );
 #endif
 
-#if defined(HAL_CONFIG_HAS_PWR_LED)
+#ifdef HAL_CONFIG_ENABLE_PWR_LED
   /* set alt func */
   HAL_GPIO_PWR_STATUS_out();
   HAL_GPIO_PWR_STATUS_clr();
@@ -287,7 +472,7 @@ void custom_hal_gpio_dap_status_set()
   TCC0->CC[DAP_STATUS_CC_CH].reg = LED_BRIGHTNESS ;
 }
 
-#if defined(HAL_CONFIG_ENABLE_VCP)
+#ifdef HAL_CONFIG_ENABLE_VCP
 void custom_hal_gpio_vcp_status_toggle()
 {
   static int last_value = 0;
@@ -302,7 +487,7 @@ void custom_hal_gpio_vcp_status_write(int val)
 
 #endif
 
-#if defined(HAL_CONFIG_HAS_PWR_LED)
+#ifdef HAL_CONFIG_ENABLE_PWR_LED
 void custom_hal_gpio_pwr_status_set()
 {
   TCC0->CC[POWER_LED_CC_CH].reg = LED_BRIGHTNESS ;
@@ -313,18 +498,18 @@ void custom_hal_gpio_pwr_status_set()
 
 static void custom_init(void)
 {
-#ifdef HAL_CONFIG_PWM_LED
+#ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
   led_custom_init();
 #endif
 
-#ifdef DAP_CONFIG_SUPPLY_PWR
-  HAL_GPIO_SUPPLY_PWR_out();
-  HAL_GPIO_SUPPLY_PWR_set();
+#ifdef HAL_CONFIG_ENABLE_PROVIDE_PWR
+  HAL_GPIO_EXT_PWR_out();
+  HAL_GPIO_EXT_PWR_set();
 #endif
 
-#ifdef HAL_CONFIG_HAS_PWR_LED
+#ifdef HAL_CONFIG_ENABLE_PWR_LED
   HAL_GPIO_PWR_STATUS_out();
-#ifdef HAL_CONFIG_PWM_LED
+#ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
   custom_hal_gpio_pwr_status_set();
 #else
   HAL_GPIO_PWR_STATUS_set();
@@ -363,7 +548,7 @@ static void sys_init(void)
       GCLK_GENCTRL_RUNSTDBY | GCLK_GENCTRL_GENEN;
   while (GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
 
-#if (defined (HAL_CONFIG_PWM_LED) || defined (HAL_CONFIG_ADC_PWRSENSE))
+#if (defined (HAL_CONFIG_ENABLE_LED_PWMMODE) || defined (HAL_CONFIG_ADC_PWRSENSE))
   // enable GCLK1 for peripherals, base clock is 8MHz same as OSC8M but has
   // better accuracy when USB connected
   GCLK->GENCTRL.reg = GCLK_GENCTRL_ID(1) | GCLK_GENCTRL_SRC(GCLK_SOURCE_DFLL48M) |
@@ -373,7 +558,6 @@ static void sys_init(void)
   while (GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
 
   custom_init();
-
 #endif
 
 }
@@ -654,13 +838,13 @@ static void status_timer_task(void)
   app_status_timeout = app_system_time + STATUS_TIMEOUT;
 
   if (app_dap_event)
-#ifdef HAL_CONFIG_PWM_LED
+#ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
     custom_hal_gpio_dap_status_toggle();
 #else
     HAL_GPIO_DAP_STATUS_toggle();
 #endif
   else
-#ifdef HAL_CONFIG_PWM_LED
+#ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
     custom_hal_gpio_dap_status_set();
 #else
     HAL_GPIO_DAP_STATUS_set();
@@ -670,13 +854,13 @@ static void status_timer_task(void)
 
 #ifdef HAL_CONFIG_ENABLE_VCP
   if (app_vcp_event)
-#ifdef HAL_CONFIG_PWM_LED
+#ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
     custom_hal_gpio_vcp_status_toggle();
 #else
     HAL_GPIO_VCP_STATUS_toggle();
 #endif
   else
-#ifdef HAL_CONFIG_PWM_LED
+#ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
     custom_hal_gpio_vcp_status_write(app_vcp_open);
 #else
     HAL_GPIO_VCP_STATUS_write(app_vcp_open);
@@ -710,6 +894,7 @@ int main(void)
   HAL_GPIO_DAP_STATUS_set();
 
   HAL_GPIO_BUTTON_in();
+
 //  HAL_GPIO_BUTTON_pullup(); Jeff Probe has an external pullup
 
   while (1)
@@ -729,6 +914,9 @@ int main(void)
     uart_timer_task();
 #endif
 
+#ifdef HAL_CONFIG_ENABLE_BUTTON
+    button_task();
+#endif
 //    if (0 == HAL_GPIO_BOOT_ENTER_read())
 //      NVIC_SystemReset();
   }

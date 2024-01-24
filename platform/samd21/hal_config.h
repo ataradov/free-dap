@@ -43,11 +43,12 @@
 
 #elif defined(HAL_BOARD_JEFF_PROBE)
   #define HAL_CONFIG_ENABLE_VCP
-  #define HAL_CONFIG_HAS_PWR_LED
-  #define HAL_CONFIG_PWM_LED
-  #define DAP_CONFIG_SUPPLY_PWR
+  #define HAL_CONFIG_ENABLE_PWR_LED
+  #define HAL_CONFIG_ENABLE_LED_PWMMODE
+  #define HAL_CONFIG_ENABLE_BUTTON
+  #define HAL_CONFIG_ENABLE_PROVIDE_PWR
   #define DAP_CONFIG_ENABLE_JTAG
-  #define DAP_CONFIG_HAS_TMS_DIR
+  #define DAP_CONFIG_ENABLE_TMS_DIR
   #define DAP_CONFIG_RST_ACTIVE_HIGH
   #define DAP_CONFIG_HAS_RST_SENSE
 
@@ -58,10 +59,10 @@
   HAL_GPIO_PIN(TDO,                A, 19)
   HAL_GPIO_PIN(nRESET,             A, 8)
   HAL_GPIO_PIN(nRESET_SENSE,       A, 9)
-  HAL_GPIO_PIN(SUPPLY_PWR,         A, 28);
+  HAL_GPIO_PIN(EXT_PWR,            A, 28);
 
-  HAL_GPIO_PIN(UART_TX,            A, 4);
-  HAL_GPIO_PIN(UART_RX,            A, 7);
+  HAL_GPIO_PIN(UART_TX,            A, 4);	// PAD[0]
+  HAL_GPIO_PIN(UART_RX,            A, 7);	// PAD[3]
 
   HAL_GPIO_PIN(VCP_STATUS,         A, 10);
   HAL_GPIO_PIN(DAP_STATUS,         A, 11);
