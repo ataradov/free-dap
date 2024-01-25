@@ -25,10 +25,10 @@ The POWER_TGT signal (the control signal to provide 3.3V power to the tagret boa
 ## TODO List
  * Add _reset sensing_. This feature is supported by _**Jeff Probe**_ hardware
  * Use button _double click_ to cycling between the following modes:
-   - DAP v1 + DAP v2 + VCP
-   - DAP v1 + VCP + HID
-   - DAP v2 + VCP + HID
- * The HID can
+   - DAP v1 (HID) + DAP v2 + VCP
+   - DAP v1 (HID) + VCP + Custom HID
+   - DAP v2 (HID) + VCP + Custom HID
+ * The custon HID can
    - Provide target board voltage readout
    - Provide debugging information from _Free DAP_ firmware itself
    - Control power supply to the target board ( similar to button single click )
