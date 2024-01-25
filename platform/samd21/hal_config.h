@@ -59,7 +59,7 @@
   HAL_GPIO_PIN(TDO,                A, 19)
   HAL_GPIO_PIN(nRESET,             A, 8)
   HAL_GPIO_PIN(nRESET_SENSE,       A, 9)
-  HAL_GPIO_PIN(EXT_PWR,            A, 28);
+  HAL_GPIO_PIN(EXT_PWR,            A, 1);	// Mod with PA01 for PWM control. original contro is on PA28
 
   HAL_GPIO_PIN(UART_TX,            A, 4);	// PAD[0]
   HAL_GPIO_PIN(UART_RX,            A, 7);	// PAD[3]

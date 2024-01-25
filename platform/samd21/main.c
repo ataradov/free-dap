@@ -19,7 +19,7 @@
 #define USB_BUFFER_SIZE		64
 #define UART_WAIT_TIMEOUT	10	// ms
 #define STATUS_TIMEOUT		250	// ms
-#define ADC_SAMPLE_INTERVAL	500	// ms
+#define ADC_SAMPLE_INTERVAL	250	// ms
 #define POWER_DETECT_THRESHOLD	7432	// 1.1V
 
 /*- Variables ---------------------------------------------------------------*/
@@ -75,12 +75,110 @@ enum button_mode {button_idle, button_click, button_doubletap, button_tripletap,
 static enum button_mode button_state = button_idle;
 #endif
 
+#ifdef HAL_CONFIG_ENABLE_PROVIDE_PWR
+#define PWR_PWM_STEP		64U
+volatile uint8_t		power_state = 0;	// 0 power off, 1 power on, 2 turning on
+uint16_t			power_level = 0;
+#endif
 //#define BUTTON_DEBUG
 //#define ADC_DEBUG
+//#define PWR_DEBUG
 
 /*- Implementations ---------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
+#ifdef HAL_CONFIG_ENABLE_PROVIDE_PWR
+static void pwr_custom_init()
+{
+  /* Enable the APB clock for TCC2 */
+  PM->APBCMASK.reg |= PM_APBCMASK_TCC2;
+  /* Enable GCLK1 and wire it up to TCC2 */
+  GCLK->CLKCTRL.reg = GCLK_CLKCTRL_CLKEN |GCLK_CLKCTRL_ID_TCC2_TC3 |
+                    GCLK_CLKCTRL_GEN(1);
+  /* Wait until the clock bus is synchronized. */
+  while (GCLK->STATUS.bit.SYNCBUSY) {};
+
+  /* Configure the clock prescaler for TCC2.
+  */
+  TCC2->CTRLA.reg |= TCC_CTRLA_PRESCALER(TCC_CTRLA_PRESCALER_DIV1_Val);
+
+  TCC2->PER.reg = PWR_PWM_STEP;
+  while (TCC2->SYNCBUSY.bit.PER) {};
+
+  /* Use "Normal PWM" */
+  TCC2->WAVE.reg = TCC_WAVE_WAVEGEN_NPWM;
+  /* Wait for bus synchronization */
+  while (TCC2->SYNCBUSY.bit.WAVE) {};
+
+  /* Invert ouput */
+  TCC2->DRVCTRL.reg |= TCC_DRVCTRL_INVEN1;
+  /* n for CC[n] is determined by n = x % 4 where x is from WO[x]
+   WO[x] comes from the peripheral multiplexer - we'll get to that in a second.
+  */
+  TCC2->CC[1].reg = 0;
+  while (TCC2->SYNCBUSY.bit.CC3) {};
+
+  TCC2->CTRLA.reg |= (TCC_CTRLA_ENABLE);
+  while (TCC2->SYNCBUSY.bit.ENABLE) {};
+
+}
+
+static void ext_power_toggle()
+{
+#ifdef PWR_DEBUG
+  static alignas(4) uint8_t  message[12] = {'P','S','=', 0,'L','=',0,0,'\n',0};
+  uint16_t dbg = power_state;
+  for (int i = 0; i < 1; i++){
+    message[3-i] = "0123456789ABCDEF"[dbg & 0xf];
+    dbg >>= 4;
+  }
+  dbg = power_level;
+  for (int i = 0; i < 2; i++){
+    message[7-i] = "0123456789ABCDEF"[dbg & 0xf];
+    dbg >>= 4;
+  }
+  usb_cdc_send(message,9);
+#endif
+//  HAL_GPIO_EXT_PWR_toggle();
+//  return;
+  // if in power up transition, ignore the request
+  if ( power_state == 2) return;
+  if ( power_state ) {
+    // turn off power
+    HAL_GPIO_EXT_PWR_set();
+    HAL_GPIO_EXT_PWR_pmuxdis();
+    power_state = 0;
+    return;
+  }
+  power_state = 2;
+  TCC2->CC[1].reg = 0 ;
+  TCC2->INTFLAG.reg = TCC_INTFLAG_OVF;
+  TCC2->CTRLA.reg |= (TCC_CTRLA_ENABLE);
+  while (TCC2->SYNCBUSY.bit.ENABLE) {};
+  HAL_GPIO_EXT_PWR_pmuxen(HAL_GPIO_PMUX_E);
+}
+
+static void ext_power_task()
+{
+  if (power_state != 2 ) return;
+  if ( !TCC2->INTFLAG.bit.OVF ) return;
+  TCC2->INTFLAG.reg = TCC_INTFLAG_OVF;
+  power_level ++;
+  if ( power_level < PWR_PWM_STEP ) {
+    TCC2->CC[1].reg = power_level;
+    return;
+  }
+  // reach full power on
+  HAL_GPIO_EXT_PWR_clr();
+  HAL_GPIO_EXT_PWR_pmuxdis();
+  TCC2->CTRLA.reg &= ~(TCC_CTRLA_ENABLE);
+  power_state = 1;
+  power_level = 0;
+}
+
+#endif
+
+
 #ifdef HAL_CONFIG_ENABLE_BUTTON
 static void button_task(void)
 {
@@ -245,7 +343,7 @@ static void button_task(void)
 #endif
     switch (button_state ) {
       case button_click:
-        HAL_GPIO_EXT_PWR_toggle();
+        ext_power_toggle();
         break;
       case button_doubletap_hold:
         NVIC_SystemReset();
@@ -397,6 +495,7 @@ static void adc_task(void)
 
 #endif
 
+
 #ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
 static void led_custom_init()
 {
@@ -410,8 +509,8 @@ static void led_custom_init()
 
   /* Configure the clock prescaler for each TCC.
      This lets you divide up the clocks frequency to make the TCC count slower
-     than the clock. In this case, 8MHz clock by 4 making the
-     TCC operate at 2MHz. This means each count (or "tick") is 0.5us.
+     than the clock. In this case, 8MHz clock by 16 making the
+     TCC operate at 500kHz. This means each count (or "tick") is 2us.
   */
   TCC0->CTRLA.reg |= TCC_CTRLA_PRESCALER(TCC_CTRLA_PRESCALER_DIV16_Val);
 
@@ -502,11 +601,6 @@ static void custom_init(void)
   led_custom_init();
 #endif
 
-#ifdef HAL_CONFIG_ENABLE_PROVIDE_PWR
-  HAL_GPIO_EXT_PWR_out();
-  HAL_GPIO_EXT_PWR_set();
-#endif
-
 #ifdef HAL_CONFIG_ENABLE_PWR_LED
   HAL_GPIO_PWR_STATUS_out();
 #ifdef HAL_CONFIG_ENABLE_LED_PWMMODE
@@ -518,6 +612,12 @@ static void custom_init(void)
 
 #ifdef HAL_CONFIG_ADC_PWRSENSE
   adc_init();
+#endif
+
+#ifdef HAL_CONFIG_ENABLE_PROVIDE_PWR
+  HAL_GPIO_EXT_PWR_out();
+  HAL_GPIO_EXT_PWR_set();
+  pwr_custom_init();
 #endif
 }
 
@@ -916,6 +1016,9 @@ int main(void)
 
 #ifdef HAL_CONFIG_ENABLE_BUTTON
     button_task();
+#endif
+#ifdef HAL_CONFIG_ENABLE_PROVIDE_PWR
+    ext_power_task();
 #endif
 //    if (0 == HAL_GPIO_BOOT_ENTER_read())
 //      NVIC_SystemReset();
